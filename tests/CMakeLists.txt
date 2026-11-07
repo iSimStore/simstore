@@ -29,6 +29,16 @@ target_compile_options(SimStoreCatalogGridTest PRIVATE -parse-as-library)
 add_test(NAME catalog-grid COMMAND SimStoreCatalogGridTest)
 set_tests_properties(catalog-grid PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
 
+# Exercise the actual navigation owner so view identity regressions rerun its loading tasks.
+get_target_property(NAVIGATION_SOURCES SimStore SOURCES)
+list(FILTER NAVIGATION_SOURCES INCLUDE REGEX "\\.swift$")
+list(FILTER NAVIGATION_SOURCES EXCLUDE REGEX "(^|/)SimStoreApp\\.swift$")
+list(TRANSFORM NAVIGATION_SOURCES PREPEND "${PROJECT_SOURCE_DIR}/src/")
+add_executable(SimStoreNavigationTest CatalogNavigationTests.swift ${NAVIGATION_SOURCES})
+target_compile_options(SimStoreNavigationTest PRIVATE -parse-as-library)
+add_test(NAME catalog-navigation COMMAND SimStoreNavigationTest)
+set_tests_properties(catalog-navigation PROPERTIES TIMEOUT 25 RUN_SERIAL TRUE)
+
 add_executable(SimStoreCatalogCategoriesCheck EXCLUDE_FROM_ALL CatalogCategoriesCheck.swift
     "${PROJECT_SOURCE_DIR}/src/AppCatalog.swift"
     "${PROJECT_SOURCE_DIR}/src/AppConfiguration.swift"

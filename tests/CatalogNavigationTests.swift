@@ -1,0 +1,189 @@
+import AppKit
+import SwiftUI
+
+@main
+@MainActor
+struct CatalogNavigationTests {
+  static func main() async {
+    do {
+      NSApplication.shared.setActivationPolicy(.regular)
+      let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        .appending(path: "build/navigation-test-\(UUID())")
+      defer { try? FileManager.default.removeItem(at: directory) }
+      let probe = NavigationProbe()
+      let client = CatalogClient(
+        url: URL(string: "https://example.com/index.json")!,
+        cacheURL: directory.appending(component: "index.json"),
+        transport: { try await probe.fetch($0) })
+      let host = NSHostingView(
+        rootView: ContentView(
+          discover: { probe.scan() }, boot: { _ in throw failure("Unexpected boot") },
+          shutdown: { _ in throw failure("Unexpected shutdown") }, catalogClient: client,
+          loadInstalledApps: { await probe.installed(on: $0) }))
+      let window = NSWindow(
+        contentRect: NSRect(x: 200, y: 200, width: 1180, height: 780),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      window.contentView = host
+      window.orderFront(nil)
+      defer { window.close() }
+      try await eventually { probe.pendingDownload != nil && search(in: host) != nil }
+      let query = "Keep this search"
+      let field = search(in: host)!
+      field.stringValue = query
+      field.delegate?.controlTextDidChange?(
+        Notification(name: NSControl.textDidChangeNotification, object: field))
+      probe.pendingDownload?.resume()
+      probe.pendingDownload = nil
+      try await eventually { category(in: host) != nil && probe.inventoryCalls == ["A"] }
+      try await settle(host)
+      guard let sections = views(NSTableView.self, in: host).first(where: { $0.numberOfRows == 3 })
+      else { throw failure("Expected the native library navigation list.") }
+      choose("Utilities", in: category(in: host)!)
+      try await settle(host)
+      let initialDownloads = probe.catalogCalls
+      let initialQueries = probe.inventoryCalls
+      for index in [1, 2, 0] {
+        sections.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        try await settle(host)
+        print("Section \(index): downloads=\(probe.catalogCalls), queries=\(probe.inventoryCalls)")
+        try require(
+          probe.catalogCalls == initialDownloads && probe.inventoryCalls == initialQueries,
+          "Switching sections must reuse the catalog and installed-app inventory.")
+        try require(
+          search(in: host)?.stringValue == query, "Keep the search when switching sections.")
+        try require(
+          category(in: host)?.titleOfSelectedItem == "Utilities",
+          "Keep a category supported by the new section.")
+      }
+      sections.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+      try await settle(host)
+      choose("Games", in: category(in: host)!)
+      try await settle(host)
+      try require(
+        category(in: host)?.titleOfSelectedItem == "Games", "Select an installed category.")
+      sections.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+      try await settle(host)
+      try require(
+        category(in: host)?.titleOfSelectedItem == "All Apps"
+          && search(in: host)?.stringValue == query,
+        "Reset an unsupported category while preserving the search.")
+      try require(
+        probe.catalogCalls == initialDownloads && probe.inventoryCalls == initialQueries,
+        "Filter changes must not reload the catalog or inventory.")
+
+      guard
+        let simulators = views(NSTableView.self, in: host).first(where: { $0.numberOfRows == 2 })
+      else { throw failure("Expected the simulator list.") }
+      simulators.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+      try await eventually { probe.inventoryCalls == initialQueries + ["B"] }
+      try await settle(host)
+      NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+      try await eventually { probe.inventoryCalls == initialQueries + ["B", "B"] }
+      try await settle(host)
+      try require(
+        probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
+        "Inventory refreshes must preserve the catalog and search.")
+      print(
+        "PASS: section and filter changes reuse data; device and activation refreshes still work."
+      )
+    } catch {
+      FileHandle.standardError.write(
+        Data("Catalog navigation test failed: \(error.localizedDescription)\n".utf8))
+      exit(EXIT_FAILURE)
+    }
+  }
+
+  private static func choose(_ title: String, in picker: NSPopUpButton) {
+    picker.selectItem(withTitle: title)
+    picker.menu?.performActionForItem(at: picker.indexOfSelectedItem)
+  }
+
+  private static func search(in view: NSView) -> NSTextField? {
+    views(NSTextField.self, in: view).first {
+      $0.isEditable && $0.placeholderString == "Search apps"
+    }
+  }
+
+  private static func category(in view: NSView) -> NSPopUpButton? {
+    views(NSPopUpButton.self, in: view).first { $0.itemTitles.contains("All Apps") }
+  }
+
+  private static func views<T: NSView>(_ type: T.Type, in view: NSView) -> [T] {
+    (view as? T).map { [$0] } ?? view.subviews.flatMap { views(type, in: $0) }
+  }
+
+  private static func settle(_ view: NSView) async throws {
+    for _ in 0..<10 {
+      view.layoutSubtreeIfNeeded()
+      try await Task.sleep(for: .milliseconds(20))
+    }
+  }
+
+  private static func eventually(_ condition: () -> Bool) async throws {
+    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+    while !condition() {
+      guard ContinuousClock.now < deadline else { throw failure("Wait for catalog navigation UI.") }
+      try await Task.sleep(for: .milliseconds(20))
+    }
+  }
+
+  private static func require(_ condition: Bool, _ message: String) throws {
+    if !condition { throw failure(message) }
+  }
+
+  nonisolated private static func failure(_ message: String) -> NSError {
+    NSError(
+      domain: "CatalogNavigationTests", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
+  }
+}
+
+@MainActor
+private final class NavigationProbe {
+  var catalogCalls = 0
+  var inventoryCalls: [String] = []
+  var pendingDownload: CheckedContinuation<Void, Never>?
+
+  func scan() -> SimulatorDiscovery {
+    SimulatorDiscovery(
+      developerDirectory: URL(fileURLWithPath: "/Developer"),
+      devices: ["A", "B"].map {
+        SimulatorDevice(id: $0, name: "iPhone \($0)", runtime: "27.0", state: .booted)
+      })
+  }
+
+  func installed(on device: SimulatorDevice) -> [SimulatorApplication] {
+    inventoryCalls.append(device.id)
+    return [
+      SimulatorApplication(
+        bundleID: "org.example.installed", version: "0.9.0", isUserApplication: true),
+      SimulatorApplication(
+        bundleID: "org.example.installed-game", version: "0.9.0", isUserApplication: true),
+    ]
+  }
+
+  func fetch(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    catalogCalls += 1
+    if catalogCalls == 1 { await withCheckedContinuation { pendingDownload = $0 } }
+    let apps = ["installed", "installed-game", "discover"].map { id -> [String: Any] in
+      [
+        "id": id, "name": id, "bundleID": "org.example.\(id)",
+        "repository": "https://example.com/app", "license": "MIT",
+        "description": ["en": "An example app."],
+        "categories": [id == "installed-game" ? "games" : "utilities"],
+        "versions": [
+          [
+            "version": "1.0.0", "minSimulatorOS": "16.0", "size": 1,
+            "sha256": String(repeating: "a", count: 64),
+            "revision": String(repeating: "b", count: 40),
+            "recipeRevision": String(repeating: "c", count: 40), "time": 0,
+          ]
+        ],
+      ]
+    }
+    return (
+      try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "apps": apps]),
+      HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+    )
+  }
+}
