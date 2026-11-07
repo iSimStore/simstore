@@ -1,6 +1,34 @@
 import SwiftUI
 
 @MainActor
+struct SimulatorRefreshWarningView: View {
+  let error: String
+  let isChecking: Bool
+  let checkAgain: () -> Void
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Showing Previous Simulator List").fontWeight(.medium)
+        Text(verbatim: error)
+          .foregroundStyle(.secondary)
+          .lineLimit(3)
+          .help(Text(verbatim: error))
+          .textSelection(.enabled)
+      }
+      Spacer(minLength: 12)
+      SimulatorCheckButton(isChecking: isChecking, isRetry: true, action: checkAgain)
+    }
+    .font(.system(size: 12))
+    .padding(12)
+    .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("simulator-refresh-warning")
+  }
+}
+
+@MainActor
 struct SimulatorLoadingView: View {
   var body: some View {
     VStack(spacing: 15) {

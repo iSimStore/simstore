@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
 @main
@@ -7,6 +8,13 @@ struct CatalogNavigationTests {
   static func main() async {
     do {
       NSApplication.shared.setActivationPolicy(.regular)
+      NSApplication.shared.finishLaunching()
+      // Register an accessibility client so SwiftUI builds its virtual accessibility elements.
+      _ = await Task.detached {
+        var role: CFTypeRef?
+        return AXUIElementCopyAttributeValue(
+          AXUIElementCreateApplication(getpid()), kAXRoleAttribute as CFString, &role)
+      }.value
       let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appending(path: "build/navigation-test-\(UUID())")
       defer { try? FileManager.default.removeItem(at: directory) }
@@ -17,7 +25,7 @@ struct CatalogNavigationTests {
         transport: { try await probe.fetch($0) })
       let host = NSHostingView(
         rootView: ContentView(
-          discover: { probe.scan() }, boot: { _ in throw failure("Unexpected boot") },
+          discover: { try probe.scan() }, boot: { _ in throw failure("Unexpected boot") },
           shutdown: { _ in throw failure("Unexpected shutdown") }, catalogClient: client,
           loadInstalledApps: { await probe.installed(on: $0) }))
       let window = NSWindow(
@@ -96,6 +104,29 @@ struct CatalogNavigationTests {
       try require(
         probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
         "Inventory refreshes must preserve the catalog and search.")
+
+      try require(
+        accessibilityElement("simulator-refresh-warning", in: host) == nil,
+        "Do not show the refresh warning before a scan fails.")
+      probe.shouldFailScan = true
+      NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+      try await eventually {
+        probe.failedScans == 1 && probe.inventoryCalls == initialQueries + ["B", "B", "B"]
+          && search(in: host)?.stringValue == query
+          && views(NSTableView.self, in: host).contains(where: { $0.numberOfRows == 2 })
+          && accessibilityElement("simulator-refresh-warning", in: host) != nil
+      }
+      try await checkNoRefresh(
+        probe, downloads: initialDownloads, queries: initialQueries + ["B", "B", "B"], in: host)
+      probe.shouldFailScan = false
+      NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+      try await eventually {
+        probe.inventoryCalls == initialQueries + ["B", "B", "B", "B"]
+          && accessibilityElement("simulator-refresh-warning", in: host) == nil
+      }
+      try require(
+        probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
+        "Discovery failure and recovery must keep the browser, filters, and catalog alive.")
       print(
         "PASS: section and filter changes reuse data; device and activation refreshes still work."
       )
@@ -123,6 +154,17 @@ struct CatalogNavigationTests {
 
   private static func views<T: NSView>(_ type: T.Type, in view: NSView) -> [T] {
     (view as? T).map { [$0] } ?? view.subviews.flatMap { views(type, in: $0) }
+  }
+
+  private static func accessibilityElement(_ id: String, in view: NSView) -> AnyObject? {
+    var pending: [AnyObject] = [view]
+    var visited: Set<ObjectIdentifier> = []
+    while let element = pending.popLast() {
+      guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
+      if element.accessibilityIdentifier?() == id { return element }
+      pending.append(contentsOf: (element.accessibilityChildren?() ?? []).map { $0 as AnyObject })
+    }
+    return nil
   }
 
   private static func checkNoRefresh(
@@ -164,9 +206,17 @@ private final class NavigationProbe {
   var catalogCalls = 0
   var inventoryCalls: [String] = []
   var pendingDownload: CheckedContinuation<Void, Never>?
+  var shouldFailScan = false
+  var failedScans = 0
 
-  func scan() -> SimulatorDiscovery {
-    SimulatorDiscovery(
+  func scan() throws -> SimulatorDiscovery {
+    if shouldFailScan {
+      failedScans += 1
+      throw NSError(
+        domain: "CatalogNavigationTests", code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Temporary discovery failure"])
+    }
+    return SimulatorDiscovery(
       developerDirectory: URL(fileURLWithPath: "/Developer"),
       devices: ["A", "B"].map {
         SimulatorDevice(id: $0, name: "iPhone \($0)", runtime: "27.0", state: .booted)

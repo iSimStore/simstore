@@ -449,7 +449,9 @@ struct AppInstallationTests {
     let prompt = monitor.prompt
     state.shouldFail = true
     await simulators.refresh()
-    try InstallationFixtures.require(simulators.discovery == nil, "The scan must fail.")
+    try InstallationFixtures.require(
+      simulators.discovery?.devices == [device] && simulators.refreshError != nil,
+      "A failed scan must retain the inventory and report its warning.")
     monitor.synchronize(with: simulators.discovery?.devices)
     try InstallationFixtures.require(
       monitor.prompt == prompt, "A failed scan must preserve the blocked operation's prompt.")

@@ -1937,6 +1937,22 @@
         }
       }
     },
+    "Showing Previous Simulator List": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing Previous Simulator List"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示上次获取的模拟器列表"
+          }
+        }
+      }
+    },
     "Showing Saved Catalog": {
       "localizations": {
         "en": {

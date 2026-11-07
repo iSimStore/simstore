@@ -12,6 +12,12 @@ Requests bypass Foundation's local HTTP cache and use a 30-second request timeou
 
 A network, HTTP, or validation failure preserves the last valid catalog and displays a saved-catalog notice. If no valid catalog is available, the page offers an error and retry action. An unreadable or invalid disk copy is ignored and can be replaced by a successful download. A disk write failure is logged without discarding a valid downloaded catalog. Concurrent refreshes share one request; an active caller retries if the task owning its shared refresh was canceled.
 
+## Simulator discovery
+
+The last successful simulator inventory is retained in memory for the current application session. If a later scan fails, the sidebar and browser keep their devices and selection while a warning offers a retry. A successful scan replaces the inventory, including clearing devices when it returns an empty list. Before any successful scan, discovery failures still show the setup or error screen. Cancellation preserves the current inventory without adding a warning.
+
+Starting or shutting down a simulator requires a successful scan after its control command before SimStore reports the operation as confirmed. Retained power states cannot substitute for that scan. The retained inventory can still be used to retry a shutdown recovery request when discovery is temporarily unavailable. The recovery alert closes when the shutdown request is accepted for execution; this acknowledges acceptance, rather than confirmation that the simulator has shut down. Command failures are reported separately, and the displayed power state is confirmed by a successful scan.
+
 ## App icons
 
 `IconCache` is shared by app cards and detail sheets. The key is the SHA-256 digest of the original release-asset URL, a newline, and the latest version's `recipeRevision`. The original URL is used even when GitHub redirects to a temporary asset URL. This digest identifies the cache entry; the catalog's archive SHA-256 is not an icon checksum.
