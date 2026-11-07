@@ -8,6 +8,8 @@ struct SimulatorStoreTests {
       try await selectionAndRefresh()
       try await initialFailureAndEmptyInventory()
       try await cancelledRefreshKeepsInventory()
+      try await sharedScanRetriesAfterOwnerCancellation()
+      try await sharedScanDoesNotRetryCancelledWaiters()
       try await sharedScanReportsFailure()
       try await controlRequiresSuccessfulRefresh()
       try await startingAndSelectionChanges()
@@ -103,6 +105,83 @@ struct SimulatorStoreTests {
   }
 
   static func sharedScanReportsFailure() async throws {
+    for error in [failure("Shared discovery failure") as Error, CancellationError()] {
+      try await sharedScanReportsFailure(error)
+    }
+  }
+
+  static func sharedScanRetriesAfterOwnerCancellation() async throws {
+    for retryFails in [false, true] {
+      let fixture = Inventory([device("A", state: .booted)])
+      let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
+      await store.refresh()
+      fixture.deferNextScan = true
+      let owner = Task { await store.refresh() }
+      try await eventually { fixture.pendingScan != nil }
+      var joined = 0
+      let waiters = (0..<3).map { _ in
+        Task {
+          joined += 1
+          return await store.refresh()
+        }
+      }
+      try await eventually { joined == 3 }
+      waiters[0].cancel()
+      owner.cancel()
+      fixture.deferNextScan = true
+      fixture.finishScan(with: [device("B", state: .booted)])
+      try require(await owner.value == false, "A cancelled owner must not report success.")
+      try require(await waiters[0].value == false, "A cancelled waiter must not retry.")
+      try await eventually { fixture.calls == 3 && fixture.pendingScan != nil }
+      try require(
+        store.selectedDeviceID == "A" && store.discovery?.devices == fixture.devices
+          && store.refreshError == nil && store.isChecking,
+        "Keep the previous inventory and selection while active waiters retry a cancelled scan.")
+      if retryFails {
+        fixture.pendingScan?.resume(throwing: failure("Retry failed"))
+        fixture.pendingScan = nil
+      } else {
+        fixture.finishScan(with: [device("B", state: .booted)])
+      }
+      for waiter in waiters.dropFirst() {
+        try require(
+          await waiter.value == !retryFails, "Active waiters must report the retry's outcome.")
+      }
+      try require(
+        fixture.calls == 3 && !store.isChecking,
+        "Active waiters must share one retry and stop after it succeeds or fails.")
+      try require(
+        store.selectedDeviceID == (retryFails ? "A" : "B")
+          && store.discovery?.devices
+            == (retryFails ? fixture.devices : [device("B", state: .booted)])
+          && store.refreshError == (retryFails ? "Retry failed" : nil),
+        "Publish a successful retry or preserve the previous inventory with the retry failure.")
+    }
+  }
+
+  static func sharedScanDoesNotRetryCancelledWaiters() async throws {
+    let fixture = Inventory([])
+    let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
+    fixture.deferNextScan = true
+    let owner = Task { await store.refresh() }
+    try await eventually { fixture.pendingScan != nil }
+    var joined = false
+    let waiter = Task {
+      joined = true
+      return await store.refresh()
+    }
+    try await eventually { joined }
+    owner.cancel()
+    waiter.cancel()
+    fixture.finishScan(with: [device("A")])
+    try require(await owner.value == false, "The cancelled owner cannot publish an inventory.")
+    try require(await waiter.value == false, "The cancelled waiter cannot retry discovery.")
+    try require(
+      fixture.calls == 1 && store.result == nil && store.refreshError == nil && !store.isChecking,
+      "Cancelling all callers must stop discovery without publishing data or an error.")
+  }
+
+  static func sharedScanReportsFailure(_ error: Error) async throws {
     let fixture = Inventory([device("A", state: .booted)])
     let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
     await store.refresh()
@@ -115,14 +194,14 @@ struct SimulatorStoreTests {
       return await store.refresh()
     }
     try await eventually { joined }
-    fixture.pendingScan?.resume(throwing: failure("Shared discovery failure"))
+    fixture.pendingScan?.resume(throwing: error)
     fixture.pendingScan = nil
     let ownerRefreshed = await owner.value
     let waiterRefreshed = await waiter.value
     try require(
       !ownerRefreshed && !waiterRefreshed && fixture.calls == 2
         && store.discovery?.devices == fixture.devices
-        && store.refreshError == "Shared discovery failure",
+        && store.refreshError == (error is CancellationError ? nil : error.localizedDescription),
       "All callers must observe a shared scan failure while keeping the last successful snapshot.")
   }
 
