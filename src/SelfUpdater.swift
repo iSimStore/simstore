@@ -37,11 +37,12 @@ struct SelfUpdater: Sendable {
     defer { if !prepared { try? FileManager.default.removeItem(at: directory) } }
     let archive = directory.appending(component: AppConfiguration.archiveName)
     await progress(.downloading(0))
-    try await download(
-      AppConfiguration.updateAssetURL(tag: release.tag, filename: AppConfiguration.archiveName),
-      archive
+    try await AppDownload.fetch(
+      from: AppConfiguration.updateAssetURL(
+        tag: release.tag, filename: AppConfiguration.archiveName),
+      to: archive, using: download
     ) { bytes in
-      Task { @MainActor in progress(.downloading(bytes)) }
+      progress(.downloading(bytes))
     }
     try Task.checkCancellation()
     await progress(.verifying)

@@ -48,7 +48,7 @@ struct AppInstallationTests {
               appID: "example", version: "1.0.0", filename: "example.app.tar.bz2"),
           "Download the selected version's stable release asset.")
         try data.write(to: destination)
-        progress(Int64(data.count))
+        for step in 1...10_000 { progress(Int64(step) * Int64(data.count) / 10_000) }
       }, command: commands.run, temporaryDirectory: work)
     let version = InstallationFixtures.version(data: data)
     var phases: [AppInstallationPhase] = []
@@ -61,6 +61,17 @@ struct AppInstallationTests {
     try InstallationFixtures.require(
       phases.contains(.verifying) && phases.contains(.extracting) && phases.contains(.installing),
       "Report preparation and installation stages.")
+    let downloads = phases.prefix {
+      if case .downloading = $0 { return true }
+      return false
+    }
+    try InstallationFixtures.require(
+      downloads.count <= 10 && downloads.last == .downloading(Int64(data.count))
+        && phases.dropFirst(downloads.count).allSatisfy {
+          if case .downloading = $0 { return false }
+          return true
+        },
+      "Coalesce bursty download progress and deliver the final byte count before verification.")
     let installed = commands.calls.filter { $0.first == "simctl" }
     try InstallationFixtures.require(
       installed.count == 1 && installed[0].prefix(3) == ["simctl", "install", "device-A"],
