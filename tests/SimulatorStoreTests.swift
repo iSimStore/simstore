@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 @main
 @MainActor
@@ -11,6 +12,7 @@ struct SimulatorStoreTests {
       try await sharedScanRetriesAfterOwnerCancellation()
       try await sharedScanDoesNotRetryCancelledWaiters()
       try await sharedScanReportsFailure()
+      try await sharedScanKeepsOutcomeAfterLateCancellation()
       try await controlRequiresSuccessfulRefresh()
       try await startingAndSelectionChanges()
       try await independentStarts()
@@ -203,6 +205,48 @@ struct SimulatorStoreTests {
         && store.discovery?.devices == fixture.devices
         && store.refreshError == (error is CancellationError ? nil : error.localizedDescription),
       "All callers must observe a shared scan failure while keeping the last successful snapshot.")
+  }
+
+  static func sharedScanKeepsOutcomeAfterLateCancellation() async throws {
+    for scanFails in [false, true] {
+      let fixture = Inventory([device("A", state: .booted)])
+      let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
+      await store.refresh()
+      fixture.deferNextScan = true
+      let owner = Task { await store.refresh() }
+      try await eventually { fixture.pendingScan != nil }
+      var joined = false
+      let waiter = Task {
+        joined = true
+        return await store.refresh()
+      }
+      try await eventually { joined }
+      // Cancel as the completed scan clears its observable progress state.
+      withObservationTracking {
+        _ = store.isChecking
+      } onChange: {
+        owner.cancel()
+      }
+      if scanFails {
+        let error = failure("Completed scan failed")
+        fixture.error = error
+        fixture.pendingScan?.resume(throwing: error)
+        fixture.pendingScan = nil
+      } else {
+        fixture.finishScan(with: [device("B", state: .booted)])
+      }
+      try require(await owner.value == !scanFails, "The owner must report the completed scan.")
+      try require(owner.isCancelled, "Cancel the owner during completion cleanup.")
+      try require(
+        await waiter.value == !scanFails, "The waiter must receive the completed outcome.")
+      try require(
+        fixture.calls == 2 && !store.isChecking,
+        "Cancellation after a scan's outcome is established must not trigger another scan.")
+      try require(
+        store.selectedDeviceID == (scanFails ? "A" : "B")
+          && store.refreshError == (scanFails ? "Completed scan failed" : nil),
+        "Keep the completed scan's inventory and diagnostic after late cancellation.")
+    }
   }
 
   static func controlRequiresSuccessfulRefresh() async throws {

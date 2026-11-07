@@ -90,9 +90,7 @@ final class SimulatorStore {
       isChecking = false
       let waiters = refreshWaiters
       refreshWaiters.removeAll()
-      // Only cancellation of the owning task lets active waiters retry the scan.
-      let sharedOutcome: RefreshOutcome = Task.isCancelled ? .ownerCancelled : outcome
-      for waiter in waiters { waiter.resume(returning: sharedOutcome) }
+      for waiter in waiters { waiter.resume(returning: outcome) }
     }
     do {
       let discovery = try await discover()
@@ -107,9 +105,13 @@ final class SimulatorStore {
       outcome = .succeeded
       return true
     } catch is CancellationError {
+      outcome = Task.isCancelled ? .ownerCancelled : .failed
       return false
     } catch {
-      guard !Task.isCancelled else { return false }
+      guard !Task.isCancelled else {
+        outcome = .ownerCancelled
+        return false
+      }
       refreshError = error.localizedDescription
       if snapshot == nil { result = .failure(error) }
       return false
