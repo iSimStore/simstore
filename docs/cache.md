@@ -20,6 +20,16 @@ Concurrent refreshes share an in-flight scan and its outcome. If the task owning
 
 Starting or shutting down a simulator requires a successful scan after its control command before SimStore reports the operation as confirmed. Retained power states cannot substitute for that scan. The retained inventory can still be used to retry a shutdown recovery request when discovery is temporarily unavailable. The recovery alert closes when the shutdown request is accepted for execution; this acknowledges acceptance, rather than confirmation that the simulator has shut down. Command failures are reported separately, and the displayed power state is confirmed by a successful scan.
 
+## Local command execution
+
+The built-in `Command.run` runner is synchronous and checks its current task for cancellation immediately before launching a child process. Production callers run these commands in background tasks. Once launched, the runner drains output and waits for the process to exit, then returns the actual output or exit error even if its task was canceled in the meantime. There is no process timeout or automatic termination. A stuck command can therefore keep its background worker occupied indefinitely; the network timeouts documented here do not apply to local commands.
+
+Simulator discovery, installed-app queries, boot, shutdown, install, launch, and uninstall use detached command workers. Canceling their calling task does not cancel those workers or terminate an already running command. Boot, shutdown, and installed-app queries check the caller's cancellation again after the worker finishes; `SimulatorStore` checks cancellation before publishing a discovery result. Install, launch, and uninstall preserve the completed command's outcome, so a late cancellation does not imply the simulator operation was undone. Terminating a `simctl` client would not establish whether CoreSimulator completed or rolled back a request it had already accepted.
+
+Installation and self-update preparation forward cancellation to their detached preparation workers. An active archive command still finishes before cancellation is observed and temporary files are removed. A canceled preparation must not launch another command or proceed to simulator installation or self-update handoff.
+
+For app operations on a booted simulator, the 30-second operation monitor offers a separate shutdown recovery request. It does not impose a command deadline or terminate the stalled process. Accepting shutdown starts an independent control command; it does not confirm shutdown or guarantee that the original command will finish. A stalled boot or discovery command has no operation-monitor prompt.
+
 ## App icons
 
 `IconCache` is shared by app cards and detail sheets. The key is the SHA-256 digest of the original release-asset URL, a newline, and the latest version's `recipeRevision`. The original URL is used even when GitHub redirects to a temporary asset URL. This digest identifies the cache entry; the catalog's archive SHA-256 is not an icon checksum.

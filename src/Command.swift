@@ -6,6 +6,10 @@ enum Command {
   static let xcrunExecutable = "/usr/bin/xcrun"
   static let simctlTool = "simctl"
 
+  /// Runs synchronously; callers must move blocking work off the main thread.
+  /// Checks the current task's cancellation before launch. Once launched, the command
+  /// runs to completion without a timeout or termination on task cancellation, and its
+  /// actual output or exit error is returned. See docs/cache.md for caller boundaries.
   static func run(_ executable: String, arguments: [String]) throws -> Data {
     let process = Process()
     let pipe = Pipe()
@@ -13,6 +17,7 @@ enum Command {
     process.arguments = arguments
     process.standardOutput = pipe
     process.standardError = pipe
+    try Task.checkCancellation()
     try process.run()
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
