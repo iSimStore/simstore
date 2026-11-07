@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 @MainActor
 enum AppUpdateBatchTests {
@@ -9,6 +10,8 @@ enum AppUpdateBatchTests {
     try await cancellationDuringInstall()
     try await separateDevices()
     try await shutdownWhileDownloading()
+    try await observableBatchLifecycle()
+    try await refusedInstallationsReleaseReservations()
     print(
       "PASS: Update All selection, queue reservations, serial execution, retry, cancellation, and per-device isolation."
     )
@@ -322,6 +325,95 @@ enum AppUpdateBatchTests {
       commands.installs.count == 1 && commands.installs.first?.deviceID == other.id,
       "The other simulator's installation must finish normally.")
     try fixture.requireClean()
+  }
+
+  private static func observableBatchLifecycle() async throws {
+    let fixture = try BatchFixture(ids: ["alpha", "bravo"])
+    defer { fixture.remove() }
+    let downloads = BatchDownloads(data: fixture.data)
+    let commands = BatchCommands()
+    let inventory = fixture.inventory()
+    let device = InstallationFixtures.device
+    await inventory.refresh(for: device)
+    let store = fixture.store(downloads: downloads, commands: commands, inventory: inventory)
+    let appeared = DispatchSemaphore(value: 0)
+    withObservationTracking {
+      _ = store.updateBatch(deviceID: device.id)
+    } onChange: {
+      appeared.signal()
+    }
+    store.updateAll(in: fixture.catalog, installedApps: inventory, on: device)
+    try InstallationFixtures.require(
+      notified(appeared), "Observing the installation store must reveal a new batch.")
+    try await downloads.waitForCount(1)
+    let id = store.updateBatch(deviceID: device.id)?.id
+    store.dismissUpdateBatch(deviceID: device.id)
+    try InstallationFixtures.require(
+      store.updateBatch(deviceID: device.id)?.id == id, "Do not dismiss a running batch.")
+    let progressed = DispatchSemaphore(value: 0)
+    withObservationTracking {
+      _ = store.updateBatch(deviceID: device.id)?.completed
+    } onChange: {
+      progressed.signal()
+    }
+    await downloads.finish(0)
+    try await downloads.waitForCount(2)
+    try InstallationFixtures.require(
+      notified(progressed) && store.updateBatch(deviceID: device.id)?.updated == 1,
+      "Batch progress must remain observable through the installation store.")
+    let completed = DispatchSemaphore(value: 0)
+    withObservationTracking {
+      _ = store.activeUpdateVersion(appID: "bravo", deviceID: device.id)
+    } onChange: {
+      completed.signal()
+    }
+    await downloads.finish(1)
+    try await finished(store, device.id)
+    try InstallationFixtures.require(
+      notified(completed) && store.activeUpdateVersion(appID: "bravo", deviceID: device.id) == nil,
+      "An observed version must be released when the queue finishes.")
+    let dismissed = DispatchSemaphore(value: 0)
+    withObservationTracking {
+      _ = store.updateBatch(deviceID: device.id)
+    } onChange: {
+      dismissed.signal()
+    }
+    store.dismissUpdateBatch(deviceID: device.id)
+    try InstallationFixtures.require(
+      notified(dismissed) && store.updateBatch(deviceID: device.id) == nil,
+      "Dismissing completed results must update observers.")
+    try fixture.requireClean()
+  }
+
+  private static func refusedInstallationsReleaseReservations() async throws {
+    let queue = AppUpdateQueue()
+    let items = ["alpha", "bravo"].map {
+      let version = InstallationFixtures.version()
+      return AppUpdateBatch.Item(
+        app: BatchFixture.app(id: $0, versions: [version]), version: version)
+    }
+    var reserved: Set<String> = []
+    var attempted: [String] = []
+    queue.start(
+      items: items, deviceID: "device-A", reserve: { reserved.insert($0.id) },
+      install: { item, _ in
+        attempted.append(item.id)
+        return nil
+      },
+      release: { reserved.remove($0.id) })
+    try InstallationFixtures.require(
+      reserved == ["alpha", "bravo"], "Reserve every member before starting the queue.")
+    try await InstallationFixtures.eventually {
+      queue.batch(deviceID: "device-A")?.isRunning == false
+    }
+    try InstallationFixtures.require(
+      reserved.isEmpty && attempted == ["alpha", "bravo"]
+        && queue.batch(deviceID: "device-A")?.canceled == 2,
+      "Refused installations must release their reservations and allow the queue to finish.")
+  }
+
+  nonisolated private static func notified(_ signal: DispatchSemaphore) -> Bool {
+    signal.wait(timeout: .now()) == .success
   }
 
   private static func finished(_ store: AppInstallationStore, _ deviceID: String) async throws {
