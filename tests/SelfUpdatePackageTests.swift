@@ -2,6 +2,7 @@ import Foundation
 
 enum SelfUpdatePackageTests {
   static func run() throws {
+    try symlinkBoundaries()
     let directory = try SelfUpdateFixtures.directory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let release = try SelfUpdateFixtures.release()
@@ -58,6 +59,17 @@ enum SelfUpdatePackageTests {
         application, release: release, bundleID: SelfUpdateFixtures.bundleID)
     }
     try FileManager.default.removeItem(at: hidden)
+    let helper = application.appending(path: "Contents/Helpers/SimStoreUpdater")
+    var library = SelfUpdateFixtures.machO()
+    library[12] = 6
+    for data in [SelfUpdateFixtures.machO(platform: 7), library, Data("not Mach-O".utf8)] {
+      try data.write(to: helper)
+      try SelfUpdateFixtures.rejects {
+        try SelfUpdatePackage.validate(
+          application, release: release, bundleID: SelfUpdateFixtures.bundleID)
+      }
+    }
+    try SelfUpdateFixtures.machO().write(to: helper)
     try FileManager.default.removeItem(
       at: application.appending(path: "Contents/Helpers/SimStoreUpdater"))
     try SelfUpdateFixtures.rejects {
@@ -67,5 +79,28 @@ enum SelfUpdatePackageTests {
     print(
       "PASS: app identity, actual minimum OS/platform/architecture, helper executable, and symlink boundaries."
     )
+  }
+
+  static func symlinkBoundaries() throws {
+    let directory = try SelfUpdateFixtures.directory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let release = try SelfUpdateFixtures.release()
+    let application = try SelfUpdateFixtures.bundle(in: directory, release: release)
+    let link = application.appending(path: "Contents/alias")
+    try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "Info.plist")
+    try SelfUpdatePackage.validate(
+      application, release: release, bundleID: SelfUpdateFixtures.bundleID)
+    try FileManager.default.removeItem(at: link)
+    let sibling = directory.appending(component: "SimStore.app-sibling")
+    try Data("outside".utf8).write(to: sibling)
+    for target in [sibling.path, "missing-file"] {
+      try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: target)
+      do {
+        try SelfUpdatePackage.validate(
+          application, release: release, bundleID: SelfUpdateFixtures.bundleID)
+        throw SelfUpdateFixtures.failure("Reject escaping or dangling symlinks in self-updates.")
+      } catch SelfUpdateError.wrongApplication {}
+      try FileManager.default.removeItem(at: link)
+    }
   }
 }

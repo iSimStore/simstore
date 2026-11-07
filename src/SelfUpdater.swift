@@ -9,7 +9,7 @@ struct PreparedSelfUpdate: Sendable {
 }
 
 struct SelfUpdater: Sendable {
-  typealias Progress = @MainActor @Sendable (AppInstallationPhase) -> Void
+  typealias Progress = PackagePipeline.Progress
   var application = Bundle.main.bundleURL
   var bundleID = AppConfiguration.applicationIdentifier
   var reportURL = SelfUpdater.failureReportURL
@@ -36,41 +36,26 @@ struct SelfUpdater: Sendable {
     var prepared = false
     defer { if !prepared { try? FileManager.default.removeItem(at: directory) } }
     let archive = directory.appending(component: AppConfiguration.archiveName)
-    await progress(.downloading(0))
-    try await AppDownload.fetch(
+    let pipeline = PackagePipeline(size: release.size, sha256: release.sha256, download: download)
+    _ = try await pipeline.prepare(
       from: AppConfiguration.updateAssetURL(
         tag: release.tag, filename: AppConfiguration.archiveName),
-      to: archive, using: download
-    ) { bytes in
-      progress(.downloading(bytes))
-    }
-    try Task.checkCancellation()
-    await progress(.verifying)
-    let preparation = Task.detached(priority: .userInitiated) {
-      try AppPackage.verify(archive, size: release.size, sha256: release.sha256)
-      await progress(.extracting)
-      let payload = try AppPackage.extract(archive, to: directory.appending(component: "payload"))
-      try SelfUpdatePackage.validate(payload, release: release, bundleID: bundleID)
-      try Task.checkCancellation()
-      let current = try SelfUpdateBuild.read(at: application)
-      let request = SelfUpdateRequest(
-        application: application, bundleID: bundleID, currentRevision: current.revision,
-        parentPID: getpid(), release: release, reportURL: reportURL,
-        language: Bundle.main.preferredLocalizations.first ?? "en")
-      try JSONEncoder().encode(request).write(
-        to: directory.appending(component: SelfUpdateRequest.filename), options: .atomic)
-      // Run the current version's assistant, independently of the bundle being replaced.
-      try FileManager.default.copyItem(
-        at: application.appending(path: "Contents/Helpers/SimStoreUpdater"),
-        to: directory.appending(component: "SimStoreUpdater"))
-      try FileManager.default.removeItem(at: archive)
-    }
-    try await withTaskCancellationHandler {
-      try await preparation.value
-    } onCancel: {
-      preparation.cancel()
-    }
-    try Task.checkCancellation()
+      archive: archive, extractingTo: directory.appending(component: "payload"), progress: progress,
+      validate: { try SelfUpdatePackage.validate($0, release: release, bundleID: bundleID) },
+      afterValidation: {
+        let current = try SelfUpdateBuild.read(at: application)
+        let request = SelfUpdateRequest(
+          application: application, bundleID: bundleID, currentRevision: current.revision,
+          parentPID: getpid(), release: release, reportURL: reportURL,
+          language: Bundle.main.preferredLocalizations.first ?? "en")
+        try JSONEncoder().encode(request).write(
+          to: directory.appending(component: SelfUpdateRequest.filename), options: .atomic)
+        // Run the current version's assistant, independently of the bundle being replaced.
+        try FileManager.default.copyItem(
+          at: application.appending(path: "Contents/Helpers/SimStoreUpdater"),
+          to: directory.appending(component: "SimStoreUpdater"))
+        try FileManager.default.removeItem(at: archive)
+      })
     prepared = true
     return PreparedSelfUpdate(directory: directory)
   }

@@ -2,7 +2,7 @@ import Foundation
 
 struct AppInstaller: Sendable {
   typealias Download = AppDownload.Fetch
-  typealias Progress = @MainActor @Sendable (AppInstallationPhase) -> Void
+  typealias Progress = PackagePipeline.Progress
 
   var download: Download = { try await AppDownload.fetch(from: $0, to: $1, progress: $2) }
   var command: Command.Runner = Command.run
@@ -21,28 +21,11 @@ struct AppInstaller: Sendable {
     let archive = directory.appending(component: "app.tar.bz2")
     let url = AppConfiguration.assetURL(
       appID: app.id, version: version.version, filename: "\(app.id).app.tar.bz2")
-    await progress(.downloading(0))
-    try await AppDownload.fetch(from: url, to: archive, using: download) { bytes in
-      progress(.downloading(bytes))
-    }
-    try Task.checkCancellation()
-    await progress(.verifying)
-    let preparation = Task.detached(priority: .userInitiated) {
-      try AppPackage.verify(archive, version: version)
-      try Task.checkCancellation()
-      await progress(.extracting)
-      let bundle = try AppPackage.extract(
-        archive, to: directory.appending(component: "contents"), command: command)
-      try AppPackage.validate(bundle, app: app, version: version)
-      try Task.checkCancellation()
-      return bundle
-    }
-    let bundle = try await withTaskCancellationHandler {
-      try await preparation.value
-    } onCancel: {
-      preparation.cancel()
-    }
-    try Task.checkCancellation()
+    let pipeline = PackagePipeline(
+      size: version.size, sha256: version.sha256, download: download, command: command)
+    let bundle = try await pipeline.prepare(
+      from: url, archive: archive, extractingTo: directory.appending(component: "contents"),
+      progress: progress, validate: { try AppPackage.validate($0, app: app, version: version) })
     await progress(.installing)
     try Task.checkCancellation()
     try await SimulatorApplications.install(bundle, on: device, command: command)

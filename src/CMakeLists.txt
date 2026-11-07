@@ -22,7 +22,9 @@ add_executable(SimStore MACOSX_BUNDLE
     CatalogCategory.swift
     AppDownload.swift
     AppPackage.swift
+    PackagePipeline.swift
     MachOValidation.swift
+    BundleValidator.swift
     AppInstaller.swift
     AppInstallationPhase.swift
     AppInstallationStore.swift
@@ -69,6 +71,7 @@ add_executable(SimStoreUpdater
     SelfUpdateRelease.swift
     SelfUpdatePackage.swift
     MachOValidation.swift
+    BundleValidator.swift
     AppCatalog.swift
 )
 set(UPDATE_HELPER "${CMAKE_CURRENT_BINARY_DIR}/updater/SimStoreUpdater")

@@ -8,6 +8,7 @@ struct AppInstallationTests {
       try AppPackageTests.run()
       try await AppDownloadTests.run()
       try await pipeline()
+      try await preparationStopsBeforeFinalization()
       try await failureAndCleanup()
       try await perDeviceJobs()
       try await presentationFailures()
@@ -83,6 +84,46 @@ struct AppInstallationTests {
     try InstallationFixtures.require(
       commands.calls.last == ["simctl", "launch", "device-A", "org.example.App"],
       "Open the installed app on its target device.")
+  }
+
+  static func preparationStopsBeforeFinalization() async throws {
+    let directory = try InstallationFixtures.temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let data = try archiveData(in: directory)
+    let version = InstallationFixtures.version(data: data)
+    let expected = InstallationFixtures.failure("Bundle validation failed")
+    for cancelled in [false, true] {
+      let work = directory.appending(component: cancelled ? "canceled" : "rejected")
+      try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+      let handoff = work.appending(component: "handoff")
+      let pipeline = PackagePipeline(
+        size: version.size, sha256: version.sha256,
+        download: { _, destination, _ in try data.write(to: destination) })
+      do {
+        _ = try await pipeline.prepare(
+          from: URL(string: "https://example.com/archive")!,
+          archive: work.appending(component: "archive.tar.bz2"),
+          extractingTo: work.appending(component: "contents"), progress: { _ in },
+          validate: { bundle in
+            try AppPackage.validate(bundle, app: InstallationFixtures.app(), version: version)
+            if cancelled {
+              withUnsafeCurrentTask { $0?.cancel() }
+            } else {
+              throw expected
+            }
+          },
+          afterValidation: { try Data().write(to: handoff) })
+        throw InstallationFixtures.failure("Rejected or canceled preparation must fail.")
+      } catch is CancellationError {
+        try InstallationFixtures.require(cancelled, "Preserve validation failures.")
+      } catch {
+        try InstallationFixtures.require(
+          !cancelled && error as NSError == expected, "Preserve the validation error unchanged.")
+      }
+      try InstallationFixtures.require(
+        !FileManager.default.fileExists(atPath: handoff.path),
+        "Failed or canceled bundle validation must not finalize a package for handoff.")
+    }
   }
 
   static func failureAndCleanup() async throws {
