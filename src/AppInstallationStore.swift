@@ -11,7 +11,6 @@ final class AppInstallationStore {
 
   private var phases: [Key: AppInstallationPhase] = [:]
   private var errors: [Key: String] = [:]
-  private var updateBatches: [String: AppUpdateBatch] = [:]
   private(set) var openedApp: Key?
   private(set) var uninstalledApp: Key?
   @ObservationIgnored private let installer: AppInstaller
@@ -24,7 +23,7 @@ final class AppInstallationStore {
   @ObservationIgnored private let didOpen: @MainActor (String, String) -> Void
   @ObservationIgnored private var jobs: [Key: Task<Void, Never>] = [:]
   @ObservationIgnored private var requests: [Key: UUID] = [:]
-  @ObservationIgnored private var batchJobs: [String: Task<Void, Never>] = [:]
+  @ObservationIgnored private let updateQueue = AppUpdateQueue()
 
   init(
     installer: AppInstaller = AppInstaller(),
@@ -54,7 +53,7 @@ final class AppInstallationStore {
 
   func hasOperations(deviceID: String) -> Bool {
     phases.keys.contains { $0.deviceID == deviceID }
-      || updateBatches[deviceID]?.isRunning == true
+      || updateQueue.batch(deviceID: deviceID)?.isRunning == true
   }
 
   func install(app: CatalogApp, version: CatalogVersion, on device: SimulatorDevice) {
@@ -135,7 +134,7 @@ final class AppInstallationStore {
     let key = Key(appID: appID, deviceID: deviceID)
     if phases[key] == .queued {
       phases[key] = nil
-      updateBatches[deviceID]?.outcomes[appID] = .canceled
+      updateQueue.cancelQueued(appID: appID, deviceID: deviceID)
       return
     }
     guard phases[key]?.canCancel == true else { return }
@@ -185,89 +184,48 @@ final class AppInstallationStore {
   }
 
   func updateBatch(deviceID: String) -> AppUpdateBatch? {
-    updateBatches[deviceID]
+    updateQueue.batch(deviceID: deviceID)
   }
 
   func activeUpdateVersion(appID: String, deviceID: String) -> CatalogVersion? {
-    guard let batch = updateBatches[deviceID], batch.isRunning, batch.outcomes[appID] == nil else {
-      return nil
-    }
-    return batch.items.first { $0.id == appID }?.version
+    updateQueue.activeVersion(appID: appID, deviceID: deviceID)
   }
 
   func pendingUpdates(
     in catalog: AppCatalog, installedApps: InstalledAppsStore, on device: SimulatorDevice
   ) -> [AppUpdateBatch.Item] {
-    guard installedApps.canInstall(on: device) else { return [] }
-    let apps = installedApps.updatableApps(in: catalog, for: device, includingRecent: false) ?? []
-    return apps.compactMap { app in
-      guard phase(appID: app.id, deviceID: device.id) == nil,
-        let version = app.availableUpdate(
-          from: installedApps.application(bundleID: app.bundleID, deviceID: device.id)?.version,
-          runtime: device.runtime)
-      else { return nil }
-      return AppUpdateBatch.Item(app: app, version: version)
+    updateQueue.pendingUpdates(in: catalog, installedApps: installedApps, on: device) {
+      phase(appID: $0, deviceID: device.id) != nil
     }
-    .sorted { $0.app.name.localizedStandardCompare($1.app.name) == .orderedAscending }
   }
 
   func updateAll(
     in catalog: AppCatalog, installedApps: InstalledAppsStore, on device: SimulatorDevice
   ) {
-    guard batchJobs[device.id] == nil else { return }
-    let items = pendingUpdates(in: catalog, installedApps: installedApps, on: device)
-    guard !items.isEmpty else { return }
-    let batch = AppUpdateBatch(items: items, currentAppID: items.first?.id)
-    updateBatches[device.id] = batch
-    for item in items {
-      let key = Key(appID: item.id, deviceID: device.id)
-      errors[key] = nil
-      phases[key] = .queued
-    }
-    batchJobs[device.id] = Task { [self] in
-      defer {
-        updateBatches[device.id]?.currentAppID = nil
-        updateBatches[device.id]?.isRunning = false
-        batchJobs[device.id] = nil
-      }
-      for item in items {
-        guard updateBatches[device.id]?.outcomes[item.id] == nil else { continue }
-        updateBatches[device.id]?.currentAppID = item.id
-        let job = startInstallation(
+    updateQueue.start(
+      items: pendingUpdates(in: catalog, installedApps: installedApps, on: device),
+      deviceID: device.id,
+      reserve: { item in
+        let key = Key(appID: item.id, deviceID: device.id)
+        errors[key] = nil
+        phases[key] = .queued
+      },
+      install: { [self] item, finished in
+        startInstallation(
           app: item.app, version: item.version, on: device, completion: didReplace,
-          fromQueue: true
-        ) { [weak self] result in
-          guard let self, updateBatches[device.id]?.id == batch.id else { return }
-          let outcome: AppUpdateBatch.Outcome
-          switch result {
-          case .success: outcome = .updated
-          case .failure(let error) where error is CancellationError: outcome = .canceled
-          case .failure(let error): outcome = .failed(error.localizedDescription)
-          }
-          updateBatches[device.id]?.outcomes[item.id] = outcome
-        }
-        if let job {
-          await job.value
-        } else {
-          updateBatches[device.id]?.outcomes[item.id] = .canceled
-          if phase(appID: item.id, deviceID: device.id) == .queued {
-            phases[Key(appID: item.id, deviceID: device.id)] = nil
-          }
-        }
-      }
-    }
+          fromQueue: true, finished: finished)
+      },
+      release: { [self] item in
+        let key = Key(appID: item.id, deviceID: device.id)
+        if phases[key] == .queued { phases[key] = nil }
+      })
   }
 
   func cancelAllUpdates(deviceID: String) {
-    guard let batch = updateBatches[deviceID], batch.isRunning, !batch.isStopping else { return }
-    updateBatches[deviceID]?.isStopping = true
-    for item in batch.items where updateBatches[deviceID]?.outcomes[item.id] == nil {
-      cancel(appID: item.id, deviceID: deviceID)
-    }
+    updateQueue.cancelAll(deviceID: deviceID) { cancel(appID: $0, deviceID: deviceID) }
   }
 
   func dismissUpdateBatch(deviceID: String) {
-    guard updateBatches[deviceID]?.isRunning == false else { return }
-    updateBatches[deviceID] = nil
+    updateQueue.dismiss(deviceID: deviceID)
   }
 }

@@ -29,6 +29,7 @@ add_executable(SimStore MACOSX_BUNDLE
     AppInstallationPhase.swift
     AppInstallationStore.swift
     AppUpdateBatch.swift
+    AppUpdateQueue.swift
     AppUpdateBatchView.swift
     AppInstallationAction.swift
     AppInstallButton.swift

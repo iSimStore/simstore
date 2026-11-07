@@ -83,6 +83,7 @@ add_executable(SimStoreInstallationTest AppInstallationTests.swift AppInstallBut
     "${PROJECT_SOURCE_DIR}/src/AppInstallationStore.swift"
     "${PROJECT_SOURCE_DIR}/src/SimulatorOperationMonitor.swift"
     "${PROJECT_SOURCE_DIR}/src/AppUpdateBatch.swift"
+    "${PROJECT_SOURCE_DIR}/src/AppUpdateQueue.swift"
     "${PROJECT_SOURCE_DIR}/src/AppInstallationAction.swift"
     "${PROJECT_SOURCE_DIR}/src/AppInstallButton.swift"
     "${PROJECT_SOURCE_DIR}/src/CatalogPresentation.swift"
