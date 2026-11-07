@@ -183,6 +183,7 @@ struct SimulatorOperationMonitorTests {
     @MainActor
     final class DiscoveryState {
       var shouldFail = false
+      var rejectsShutdown = true
       var shutdownCalls: [String] = []
     }
     let state = DiscoveryState()
@@ -205,7 +206,9 @@ struct SimulatorOperationMonitorTests {
           SimulatorRecoveryAlert(
             monitor: monitor,
             shutdown: { id in
-              guard simulators.shutdownDevice(id) != nil else { return false }
+              guard !state.rejectsShutdown, simulators.shutdownDevice(id) != nil else {
+                return false
+              }
               monitor.stop(deviceID: id)
               return true
             })))
@@ -231,12 +234,13 @@ struct SimulatorOperationMonitorTests {
     try require(
       visibleButtonTitles() == ["Keep Waiting", "Shut Down"],
       "The failure prompt must retain both waiting and retry actions.")
-    state.shouldFail = false
-    await simulators.refresh()
+    state.rejectsShutdown = false
     nativeButton("Shut Down")!.performClick(nil)
     try await eventually { state.shutdownCalls == [target.id] }
     try await eventually { nativeButton("Shut Down") == nil }
-    try require(monitor.prompt == nil, "An accepted retry can dismiss the recovery prompt.")
+    try require(
+      monitor.prompt == nil && simulators.refreshError != nil,
+      "The retained inventory permits shutdown recovery even while discovery is unavailable.")
   }
 
   private static func nativeTextContains(_ text: String) -> Bool {

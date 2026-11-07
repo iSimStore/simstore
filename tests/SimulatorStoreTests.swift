@@ -6,6 +6,10 @@ struct SimulatorStoreTests {
   static func main() async {
     do {
       try await selectionAndRefresh()
+      try await initialFailureAndEmptyInventory()
+      try await cancelledRefreshKeepsInventory()
+      try await sharedScanReportsFailure()
+      try await controlRequiresSuccessfulRefresh()
       try await startingAndSelectionChanges()
       try await independentStarts()
       try await overlappingRefresh()
@@ -32,11 +36,14 @@ struct SimulatorStoreTests {
     try require(store.selectedDeviceID == "A", "Keep an existing selection across refreshes.")
     fixture.error = failure("Discovery failed")
     await store.refresh()
-    try require(store.discovery == nil, "A discovery error must not expose a stale inventory.")
+    try require(
+      store.discovery?.devices == fixture.devices && store.refreshError == "Discovery failed",
+      "Keep the last valid inventory and expose a refresh warning.")
     try require(store.selectedDeviceID == "A", "Keep the selection through a discovery error.")
     fixture.error = nil
     fixture.devices = [device("C"), device("B", state: .booted)]
     await store.refresh()
+    try require(store.refreshError == nil, "A successful retry clears the warning.")
     try require(
       store.selectedDeviceID == "B", "Replace a disappeared selection with a booted device.")
     fixture.devices = []
@@ -46,6 +53,110 @@ struct SimulatorStoreTests {
     fixture.devices = [device("D"), device("E")]
     await store.refresh()
     try require(store.selectedDeviceID == "D", "Choose the first device when none is booted.")
+  }
+
+  static func initialFailureAndEmptyInventory() async throws {
+    let fixture = Inventory([])
+    fixture.error = SimulatorDiscoveryError.xcodeNotInstalled
+    let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
+    try require(await store.refresh() == false, "Report a failed initial scan.")
+    guard case .failure(let error) = store.result else {
+      throw failure("An initial failure still needs the setup/error screen.")
+    }
+    try require(
+      error as? SimulatorDiscoveryError == .xcodeNotInstalled && store.discovery == nil,
+      "Keep the original error when no successful inventory is available.")
+    fixture.error = nil
+    try require(await store.refresh(), "Recover with a valid empty inventory.")
+    fixture.error = failure("Temporary scan failure")
+    try require(await store.refresh() == false, "Report a failed refresh after an empty scan.")
+    try require(
+      store.discovery?.devices.isEmpty == true && store.refreshError != nil,
+      "An empty successful inventory is also retained through a failed refresh.")
+    fixture.error = nil
+    fixture.devices = [device("A", state: .booted)]
+    try require(await store.refresh(), "Retry discovery after a failure.")
+    try require(
+      store.selectedDeviceID == "A" && store.refreshError == nil,
+      "A successful retry replaces the inventory and clears the warning.")
+    fixture.devices = []
+    try require(await store.refresh(), "Accept a successful empty scan.")
+    try require(
+      store.discovery?.devices.isEmpty == true && store.selectedDeviceID == nil,
+      "A successful empty scan must clear devices from the previous inventory.")
+  }
+
+  static func cancelledRefreshKeepsInventory() async throws {
+    let fixture = Inventory([device("A", state: .booted)])
+    let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
+    await store.refresh()
+    fixture.deferNextScan = true
+    let refresh = Task { await store.refresh() }
+    try await eventually { fixture.pendingScan != nil }
+    refresh.cancel()
+    fixture.finishScan(with: [device("B", state: .booted)])
+    try require(await refresh.value == false, "A canceled scan cannot confirm fresh data.")
+    try require(
+      store.selectedDeviceID == "A" && store.discovery?.devices == fixture.devices
+        && store.refreshError == nil && !store.isChecking,
+      "Cancellation must preserve the inventory and selection without showing an error.")
+  }
+
+  static func sharedScanReportsFailure() async throws {
+    let fixture = Inventory([device("A", state: .booted)])
+    let store = SimulatorStore(discover: fixture.scan, boot: { _ in })
+    await store.refresh()
+    fixture.deferNextScan = true
+    let owner = Task { await store.refresh() }
+    try await eventually { fixture.pendingScan != nil }
+    var joined = false
+    let waiter = Task {
+      joined = true
+      return await store.refresh()
+    }
+    try await eventually { joined }
+    fixture.pendingScan?.resume(throwing: failure("Shared discovery failure"))
+    fixture.pendingScan = nil
+    let ownerRefreshed = await owner.value
+    let waiterRefreshed = await waiter.value
+    try require(
+      !ownerRefreshed && !waiterRefreshed && fixture.calls == 2
+        && store.discovery?.devices == fixture.devices
+        && store.refreshError == "Shared discovery failure",
+      "All callers must observe a shared scan failure while keeping the last successful snapshot.")
+  }
+
+  static func controlRequiresSuccessfulRefresh() async throws {
+    let errors: [Error] = [failure("Cannot confirm simulator state"), CancellationError()]
+    for starting in [true, false] {
+      for error in errors {
+        let fixture = Inventory([device("A", state: starting ? .shutdown : .booted)])
+        let probe = PowerProbe()
+        let store = SimulatorStore(
+          discover: fixture.scan, shutdown: { try await probe.run($0) },
+          boot: { try await probe.run($0) })
+        await store.refresh()
+        let job: Task<Bool, Never>
+        if starting {
+          job = Task { await store.startDevice("A") }
+        } else {
+          guard let shutdown = store.shutdownDevice("A") else { throw failure("Begin shutdown.") }
+          job = shutdown
+        }
+        try await eventually { await probe.calls == ["A"] }
+        let completedState: SimulatorState = starting ? .booted : .shutdown
+        fixture.devices = [device("A", state: completedState)]
+        await store.refresh()
+        fixture.error = error
+        await probe.finish()
+        try require(
+          await job.value == false && store.selectedDevice?.state == completedState
+            && store.refreshError
+              == (error is CancellationError ? nil : error.localizedDescription),
+          "A retained snapshot must not confirm a control operation after a failed or canceled final scan."
+        )
+      }
+    }
   }
 
   static func startingAndSelectionChanges() async throws {
@@ -98,8 +209,8 @@ struct SimulatorStoreTests {
     await probe.finish()
     fixture.devices = [device("A", state: .booted)]
     fixture.finishScan(with: [device("A")])
-    await refresh.value
-    await coalesced.value
+    _ = await refresh.value
+    _ = await coalesced.value
     try require(
       await startup.value, "Fresh readiness after an overlapping scan should report success.")
     try require(

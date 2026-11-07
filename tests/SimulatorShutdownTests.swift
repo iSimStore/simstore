@@ -83,7 +83,7 @@ extension SimulatorStoreTests {
     await probe.finish("A")
     fixture.devices = [device("A")]
     fixture.finishScan(with: [device("A", state: .booted)])
-    await refresh.value
+    _ = await refresh.value
     try require(await shutdown.value, "Do not use a scan begun before shutdown completed.")
     try require(
       fixture.calls == 3 && store.selectedDevice?.state == .shutdown,

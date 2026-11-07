@@ -58,6 +58,7 @@ struct LocalizationTests {
         ("Catalog Unavailable", "Catalog Unavailable", "无法获取应用目录"),
         ("License", "License", "许可证"),
         ("Showing Saved Catalog", "Showing Saved Catalog", "正在显示已缓存的目录"),
+        ("Showing Previous Simulator List", "Showing Previous Simulator List", "显示上次获取的模拟器列表"),
         ("Installed Version", "Installed Version", "已安装版本"),
         ("Version Unavailable", "Version Unavailable", "版本未知"),
         ("Uninstall", "Uninstall", "卸载"),

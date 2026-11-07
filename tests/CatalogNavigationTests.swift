@@ -17,7 +17,7 @@ struct CatalogNavigationTests {
         transport: { try await probe.fetch($0) })
       let host = NSHostingView(
         rootView: ContentView(
-          discover: { probe.scan() }, boot: { _ in throw failure("Unexpected boot") },
+          discover: { try probe.scan() }, boot: { _ in throw failure("Unexpected boot") },
           shutdown: { _ in throw failure("Unexpected shutdown") }, catalogClient: client,
           loadInstalledApps: { await probe.installed(on: $0) }))
       let window = NSWindow(
@@ -96,6 +96,22 @@ struct CatalogNavigationTests {
       try require(
         probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
         "Inventory refreshes must preserve the catalog and search.")
+
+      probe.shouldFailScan = true
+      NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+      try await eventually {
+        probe.failedScans == 1 && probe.inventoryCalls == initialQueries + ["B", "B", "B"]
+          && search(in: host)?.stringValue == query
+          && views(NSTableView.self, in: host).contains(where: { $0.numberOfRows == 2 })
+      }
+      try await checkNoRefresh(
+        probe, downloads: initialDownloads, queries: initialQueries + ["B", "B", "B"], in: host)
+      probe.shouldFailScan = false
+      NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+      try await eventually { probe.inventoryCalls == initialQueries + ["B", "B", "B", "B"] }
+      try require(
+        probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
+        "Discovery failure and recovery must keep the browser, filters, and catalog alive.")
       print(
         "PASS: section and filter changes reuse data; device and activation refreshes still work."
       )
@@ -164,9 +180,17 @@ private final class NavigationProbe {
   var catalogCalls = 0
   var inventoryCalls: [String] = []
   var pendingDownload: CheckedContinuation<Void, Never>?
+  var shouldFailScan = false
+  var failedScans = 0
 
-  func scan() -> SimulatorDiscovery {
-    SimulatorDiscovery(
+  func scan() throws -> SimulatorDiscovery {
+    if shouldFailScan {
+      failedScans += 1
+      throw NSError(
+        domain: "CatalogNavigationTests", code: 2,
+        userInfo: [NSLocalizedDescriptionKey: "Temporary discovery failure"])
+    }
+    return SimulatorDiscovery(
       developerDirectory: URL(fileURLWithPath: "/Developer"),
       devices: ["A", "B"].map {
         SimulatorDevice(id: $0, name: "iPhone \($0)", runtime: "27.0", state: .booted)

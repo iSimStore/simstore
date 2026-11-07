@@ -6,6 +6,7 @@ import Observation
 final class SimulatorStore {
   private(set) var result: Result<SimulatorDiscovery, Error>?
   private(set) var isChecking = false
+  private(set) var refreshError: String?
   private(set) var selectedDeviceID: String?
   private(set) var startingDeviceIDs: Set<String> = []
   private(set) var shuttingDownDeviceIDs: Set<String> = []
@@ -19,7 +20,7 @@ final class SimulatorStore {
   @ObservationIgnored
   private let shutdown: @Sendable (String) async throws -> Void
   @ObservationIgnored
-  private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
+  private var refreshWaiters: [CheckedContinuation<Bool, Never>] = []
 
   init(
     discover: @escaping @MainActor () async throws -> SimulatorDiscovery,
@@ -65,30 +66,40 @@ final class SimulatorStore {
     selectedDeviceID = id
   }
 
-  func refresh() async {
+  @discardableResult
+  func refresh() async -> Bool {
+    guard !Task.isCancelled else { return false }
     guard !isChecking else {
-      await waitForRefresh()
-      return
+      let refreshed = await waitForRefresh()
+      return refreshed && !Task.isCancelled
     }
+    var refreshed = false
     isChecking = true
     defer {
       isChecking = false
       let waiters = refreshWaiters
       refreshWaiters.removeAll()
-      for waiter in waiters { waiter.resume() }
+      for waiter in waiters { waiter.resume(returning: refreshed) }
     }
     do {
       let discovery = try await discover()
       try Task.checkCancellation()
       result = .success(discovery)
+      refreshError = nil
       if !discovery.devices.contains(where: { $0.id == selectedDeviceID }) {
         let devices = self.discovery?.devices ?? []
         selectedDeviceID =
           devices.first(where: { $0.state == .booted })?.id ?? devices.first?.id
       }
+      refreshed = true
+      return true
     } catch is CancellationError {
+      return false
     } catch {
-      result = .failure(error)
+      guard !Task.isCancelled else { return false }
+      refreshError = error.localizedDescription
+      if snapshot == nil { result = .failure(error) }
+      return false
     }
   }
 
@@ -103,7 +114,7 @@ final class SimulatorStore {
     defer { startingDeviceIDs.remove(device.id) }
     do {
       try await boot(device.id)
-      try await refreshAfterControl()
+      guard try await refreshAfterControl() else { return false }
       return snapshot?.devices.contains(where: { $0.id == device.id && $0.state == .booted })
         == true
     } catch is CancellationError {
@@ -126,7 +137,7 @@ final class SimulatorStore {
       do {
         try Task.checkCancellation()
         try await shutdown(device.id)
-        try await refreshAfterControl()
+        guard try await refreshAfterControl() else { return false }
         return snapshot?.devices.contains(where: { $0.id == device.id && $0.state == .shutdown })
           == true
       } catch is CancellationError {
@@ -139,16 +150,17 @@ final class SimulatorStore {
     }
   }
 
-  private func refreshAfterControl() async throws {
+  private func refreshAfterControl() async throws -> Bool {
     try Task.checkCancellation()
     // A scan begun before the operation completed may contain the previous power state.
-    if isChecking { await waitForRefresh() }
+    if isChecking { _ = await waitForRefresh() }
     try Task.checkCancellation()
-    await refresh()
+    let refreshed = await refresh()
     try Task.checkCancellation()
+    return refreshed
   }
 
-  private func waitForRefresh() async {
+  private func waitForRefresh() async -> Bool {
     await withCheckedContinuation { continuation in
       refreshWaiters.append(continuation)
     }

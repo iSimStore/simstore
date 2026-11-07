@@ -120,13 +120,22 @@ struct ContentView: View {
       .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
     } detail: {
       GeometryReader { geometry in
-        ZStack(alignment: .topLeading) {
-          discoveryContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+          if let error = simulators.refreshError, discovery != nil {
+            SimulatorRefreshWarningView(
+              error: error, isChecking: simulators.isChecking, checkAgain: checkAgain
+            )
+            .padding(.horizontal, 28)
+            .padding(.top, 20)
+          }
+          ZStack(alignment: .topLeading) {
+            discoveryContent
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-          if simulators.selectedDevice == nil || discovery == nil {
-            LibraryHeading(section: librarySection)
-              .padding(32)
+            if simulators.selectedDevice == nil || discovery == nil {
+              LibraryHeading(section: librarySection)
+                .padding(32)
+            }
           }
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
