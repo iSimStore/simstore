@@ -4,6 +4,12 @@ import Observation
 @MainActor
 @Observable
 final class SimulatorStore {
+  private enum RefreshOutcome {
+    case succeeded
+    case failed
+    case ownerCancelled
+  }
+
   private(set) var result: Result<SimulatorDiscovery, Error>?
   private(set) var isChecking = false
   private(set) var refreshError: String?
@@ -20,7 +26,7 @@ final class SimulatorStore {
   @ObservationIgnored
   private let shutdown: @Sendable (String) async throws -> Void
   @ObservationIgnored
-  private var refreshWaiters: [CheckedContinuation<Bool, Never>] = []
+  private var refreshWaiters: [CheckedContinuation<RefreshOutcome, Never>] = []
 
   init(
     discover: @escaping @MainActor () async throws -> SimulatorDiscovery,
@@ -70,16 +76,21 @@ final class SimulatorStore {
   func refresh() async -> Bool {
     guard !Task.isCancelled else { return false }
     guard !isChecking else {
-      let refreshed = await waitForRefresh()
-      return refreshed && !Task.isCancelled
+      let outcome = await waitForRefresh()
+      guard !Task.isCancelled else { return false }
+      switch outcome {
+      case .succeeded: return true
+      case .failed: return false
+      case .ownerCancelled: return await refresh()
+      }
     }
-    var refreshed = false
+    var outcome = RefreshOutcome.failed
     isChecking = true
     defer {
       isChecking = false
       let waiters = refreshWaiters
       refreshWaiters.removeAll()
-      for waiter in waiters { waiter.resume(returning: refreshed) }
+      for waiter in waiters { waiter.resume(returning: outcome) }
     }
     do {
       let discovery = try await discover()
@@ -91,12 +102,16 @@ final class SimulatorStore {
         selectedDeviceID =
           devices.first(where: { $0.state == .booted })?.id ?? devices.first?.id
       }
-      refreshed = true
+      outcome = .succeeded
       return true
     } catch is CancellationError {
+      outcome = Task.isCancelled ? .ownerCancelled : .failed
       return false
     } catch {
-      guard !Task.isCancelled else { return false }
+      guard !Task.isCancelled else {
+        outcome = .ownerCancelled
+        return false
+      }
       refreshError = error.localizedDescription
       if snapshot == nil { result = .failure(error) }
       return false
@@ -160,7 +175,7 @@ final class SimulatorStore {
     return refreshed
   }
 
-  private func waitForRefresh() async -> Bool {
+  private func waitForRefresh() async -> RefreshOutcome {
     await withCheckedContinuation { continuation in
       refreshWaiters.append(continuation)
     }

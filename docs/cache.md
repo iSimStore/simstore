@@ -16,6 +16,8 @@ A network, HTTP, or validation failure preserves the last valid catalog and disp
 
 The last successful simulator inventory is retained in memory for the current application session. If a later scan fails, the sidebar and browser keep their devices and selection while a warning offers a retry. A successful scan replaces the inventory, including clearing devices when it returns an empty list. Before any successful scan, discovery failures still show the setup or error screen. Cancellation preserves the current inventory without adding a warning.
 
+Concurrent refreshes share an in-flight scan and its outcome. If the task owning that scan is canceled, active waiting callers retry discovery and share the retry while it is in flight. Canceled callers do not retry, and a scan failure, including a cancellation error without owner-task cancellation, does not trigger automatic retries.
+
 Starting or shutting down a simulator requires a successful scan after its control command before SimStore reports the operation as confirmed. Retained power states cannot substitute for that scan. The retained inventory can still be used to retry a shutdown recovery request when discovery is temporarily unavailable. The recovery alert closes when the shutdown request is accepted for execution; this acknowledges acceptance, rather than confirmation that the simulator has shut down. Command failures are reported separately, and the displayed power state is confirmed by a successful scan.
 
 ## App icons
