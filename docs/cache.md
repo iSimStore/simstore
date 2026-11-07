@@ -28,7 +28,7 @@ Simulator discovery, installed-app queries, boot, shutdown, install, launch, and
 
 Installation and self-update preparation forward cancellation to their detached preparation workers. An active archive command still finishes before cancellation is observed and temporary files are removed. A canceled preparation must not launch another command or proceed to simulator installation or self-update handoff.
 
-For app operations on a booted simulator, the 30-second operation monitor offers a separate shutdown recovery request. It does not impose a command deadline or terminate the stalled process. Accepting shutdown starts an independent control command; it does not confirm shutdown or guarantee that the original command will finish. A stalled boot or discovery command has no operation-monitor prompt.
+For app operations and installed-app queries on a booted simulator, the 30-second operation monitor offers a separate shutdown recovery request. It does not impose a command deadline or terminate the stalled process. Accepting shutdown starts an independent control command; it does not confirm shutdown or guarantee that the original command will finish. A stalled boot or discovery command has no operation-monitor prompt.
 
 ## App icons
 
