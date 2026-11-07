@@ -35,17 +35,27 @@ struct CatalogNavigationTests {
         Notification(name: NSControl.textDidChangeNotification, object: field))
       probe.pendingDownload?.resume()
       probe.pendingDownload = nil
-      try await eventually { category(in: host) != nil && probe.inventoryCalls == ["A"] }
-      try await settle(host)
+      try await eventually {
+        category(in: host)?.itemTitles.contains("Utilities") == true
+          && probe.inventoryCalls == ["A"]
+          && views(NSTableView.self, in: host).contains(where: { $0.numberOfRows == 3 })
+      }
       guard let sections = views(NSTableView.self, in: host).first(where: { $0.numberOfRows == 3 })
       else { throw failure("Expected the native library navigation list.") }
       choose("Utilities", in: category(in: host)!)
-      try await settle(host)
+      try await eventually { category(in: host)?.titleOfSelectedItem == "Utilities" }
       let initialDownloads = probe.catalogCalls
       let initialQueries = probe.inventoryCalls
       for index in [1, 2, 0] {
         sections.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
-        try await settle(host)
+        try await eventually {
+          sections.selectedRow == index
+            && category(in: host)?.itemTitles.contains("Games") == (index != 0)
+            && category(in: host)?.titleOfSelectedItem == "Utilities"
+            && search(in: host)?.stringValue == query
+        }
+        try await checkNoRefresh(
+          probe, downloads: initialDownloads, queries: initialQueries, in: host)
         print("Section \(index): downloads=\(probe.catalogCalls), queries=\(probe.inventoryCalls)")
         try require(
           probe.catalogCalls == initialDownloads && probe.inventoryCalls == initialQueries,
@@ -57,30 +67,32 @@ struct CatalogNavigationTests {
           "Keep a category supported by the new section.")
       }
       sections.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
-      try await settle(host)
+      try await eventually { category(in: host)?.itemTitles.contains("Games") == true }
       choose("Games", in: category(in: host)!)
-      try await settle(host)
-      try require(
-        category(in: host)?.titleOfSelectedItem == "Games", "Select an installed category.")
+      try await eventually { category(in: host)?.titleOfSelectedItem == "Games" }
       sections.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
-      try await settle(host)
-      try require(
+      try await eventually {
         category(in: host)?.titleOfSelectedItem == "All Apps"
-          && search(in: host)?.stringValue == query,
-        "Reset an unsupported category while preserving the search.")
-      try require(
-        probe.catalogCalls == initialDownloads && probe.inventoryCalls == initialQueries,
-        "Filter changes must not reload the catalog or inventory.")
+          && search(in: host)?.stringValue == query
+          && category(in: host)?.itemTitles.contains("Games") == false
+      }
+      try await checkNoRefresh(
+        probe, downloads: initialDownloads, queries: initialQueries, in: host)
 
+      try await eventually {
+        views(NSTableView.self, in: host).contains(where: { $0.numberOfRows == 2 })
+      }
       guard
         let simulators = views(NSTableView.self, in: host).first(where: { $0.numberOfRows == 2 })
       else { throw failure("Expected the simulator list.") }
       simulators.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
       try await eventually { probe.inventoryCalls == initialQueries + ["B"] }
-      try await settle(host)
+      try await checkNoRefresh(
+        probe, downloads: initialDownloads, queries: initialQueries + ["B"], in: host)
       NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
       try await eventually { probe.inventoryCalls == initialQueries + ["B", "B"] }
-      try await settle(host)
+      try await checkNoRefresh(
+        probe, downloads: initialDownloads, queries: initialQueries + ["B", "B"], in: host)
       try require(
         probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
         "Inventory refreshes must preserve the catalog and search.")
@@ -113,17 +125,26 @@ struct CatalogNavigationTests {
     (view as? T).map { [$0] } ?? view.subviews.flatMap { views(type, in: $0) }
   }
 
-  private static func settle(_ view: NSView) async throws {
-    for _ in 0..<10 {
+  private static func checkNoRefresh(
+    _ probe: NavigationProbe, downloads: Int, queries: [String], in view: NSView
+  ) async throws {
+    // After the expected UI is ready, observe a short window for unwanted loading tasks.
+    let deadline = ContinuousClock.now.advanced(by: .milliseconds(200))
+    repeat {
       view.layoutSubtreeIfNeeded()
+      try require(
+        probe.catalogCalls == downloads && probe.inventoryCalls == queries,
+        "Navigation and filters must not start extra catalog or inventory requests.")
       try await Task.sleep(for: .milliseconds(20))
-    }
+    } while ContinuousClock.now < deadline
   }
 
-  private static func eventually(_ condition: () -> Bool) async throws {
+  private static func eventually(_ condition: () -> Bool, line: UInt = #line) async throws {
     let deadline = ContinuousClock.now.advanced(by: .seconds(5))
     while !condition() {
-      guard ContinuousClock.now < deadline else { throw failure("Wait for catalog navigation UI.") }
+      guard ContinuousClock.now < deadline else {
+        throw failure("Wait for catalog navigation UI at line \(line).")
+      }
       try await Task.sleep(for: .milliseconds(20))
     }
   }
