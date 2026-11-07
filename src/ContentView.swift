@@ -227,7 +227,6 @@ struct ContentView: View {
           shutdownSimulator: shutdownSimulator,
           openDeviceManager: openDeviceManager
         )
-        .id(librarySection)
       }
     case .some(.failure) where needsXcode:
       MissingXcodeView(

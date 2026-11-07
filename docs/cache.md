@@ -4,7 +4,9 @@ Both caches live under `URL.cachesDirectory/<application identifier>/`. The iden
 
 ## Catalog index
 
-The catalog is stored as `index.json`. On the first refresh of a `CatalogStore`, SimStore validates the disk copy and displays it immediately when valid, then requests the current index from the builds repository's `latest` release. Later refreshes keep the current in-memory catalog visible while requesting an update. Entering the catalog and using Refresh Catalog request an update; there is no periodic refresh or time-based expiry.
+The catalog is stored as `index.json`. On the first refresh of a `CatalogStore`, SimStore validates the disk copy and displays it immediately when valid, then requests the current index from the builds repository's `latest` release. Later refreshes keep the current in-memory catalog visible while requesting an update. The browser requests the catalog when it first appears and when using Refresh Catalog; there is no periodic refresh or time-based expiry.
+
+Discover, Installed, and Updates share the browser and loaded data. Switching sections does not download the catalog or query installed apps again. The search is preserved, and the selected category is kept when it is available in the destination section; otherwise the category resets to All Apps. Changing the selected simulator or its state, reactivating SimStore, and using Refresh Catalog or Check for Simulators still refresh the installed-app inventory.
 
 Requests bypass Foundation's local HTTP cache and use a 30-second request timeout. SimStore does not implement ETag or Last-Modified conditional requests. A successful HTTP response must also pass catalog decoding and validation before replacing the current catalog and atomically overwriting the disk file. No catalog timestamp comparison is performed.
 
