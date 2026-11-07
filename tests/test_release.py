@@ -210,12 +210,17 @@ class ReleaseTests(unittest.TestCase):
                 path = self.work / METADATA
                 write_json(path, {**valid, field: value})
                 Release.read(path)
-        notes = release_notes('example/simstore', '0.1.0')
-        command = notes.split('```sh\n')[1].split('\n```')[0]
-        self.assertNotIn('\n', command)
-        self.assertIn('/releases/download/0.1.0/SimStore.app.tar.bz2', command)
-        self.assertTrue(command.startswith('rm -rf /tmp/SimStore.app && curl'))
-        self.assertTrue(notes.endswith('Do NOT download by clicking the link below.\n'))
+        for tag in ('latest', '0.1.0'):
+            with self.subTest(tag=tag):
+                notes = release_notes('example/simstore', tag)
+                command = notes.split('```sh\n')[1].split('\n```')[0]
+                self.assertIn('SimStore → Check for Updates…', notes)
+                self.assertIn('first time or reinstall it manually', notes)
+                self.assertNotIn('\n', command)
+                self.assertIn(f'/releases/download/{tag}/{ARCHIVE}', command)
+                self.assertTrue(command.startswith('curl -fL '))
+                self.assertTrue(command.endswith(f'&& rm -f /tmp/{ARCHIVE}'))
+                self.assertTrue(notes.endswith('Do NOT download by clicking the link below.\n'))
 
 
 if __name__ == '__main__':

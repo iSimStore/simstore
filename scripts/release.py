@@ -112,13 +112,14 @@ def assemble_index(nightly: Release, stable: list[Release]) -> dict[str, object]
 
 def release_notes(repo: str, tag: str) -> str:
     command = (
-        'rm -rf /tmp/SimStore.app && '
         f'curl -fL https://github.com/{repo}/releases/download/{tag}/{ARCHIVE} '
         f'-o /tmp/{ARCHIVE} && rm -rf ~/Applications/SimStore.app && '
-        f'mkdir -p ~/Applications && tar -xjf /tmp/{ARCHIVE} -C ~/Applications'
+        f'mkdir -p ~/Applications && tar -xjf /tmp/{ARCHIVE} -C ~/Applications && '
+        f'rm -f /tmp/{ARCHIVE}'
     )
     return (
-        'Execute the command in Terminal to install this version:\n\n'
+        'If SimStore is already installed, choose SimStore → Check for Updates… in the app.\n\n'
+        'To install SimStore for the first time or reinstall it manually, run this command in Terminal:\n\n'
         f'```sh\n{command}\n```\n\nDo NOT download by clicking the link below.\n'
     )
 
