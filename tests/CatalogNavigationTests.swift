@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
 @main
@@ -7,6 +8,13 @@ struct CatalogNavigationTests {
   static func main() async {
     do {
       NSApplication.shared.setActivationPolicy(.regular)
+      NSApplication.shared.finishLaunching()
+      // Register an accessibility client so SwiftUI builds its virtual accessibility elements.
+      _ = await Task.detached {
+        var role: CFTypeRef?
+        return AXUIElementCopyAttributeValue(
+          AXUIElementCreateApplication(getpid()), kAXRoleAttribute as CFString, &role)
+      }.value
       let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appending(path: "build/navigation-test-\(UUID())")
       defer { try? FileManager.default.removeItem(at: directory) }
@@ -97,18 +105,25 @@ struct CatalogNavigationTests {
         probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
         "Inventory refreshes must preserve the catalog and search.")
 
+      try require(
+        accessibilityElement("simulator-refresh-warning", in: host) == nil,
+        "Do not show the refresh warning before a scan fails.")
       probe.shouldFailScan = true
       NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
       try await eventually {
         probe.failedScans == 1 && probe.inventoryCalls == initialQueries + ["B", "B", "B"]
           && search(in: host)?.stringValue == query
           && views(NSTableView.self, in: host).contains(where: { $0.numberOfRows == 2 })
+          && accessibilityElement("simulator-refresh-warning", in: host) != nil
       }
       try await checkNoRefresh(
         probe, downloads: initialDownloads, queries: initialQueries + ["B", "B", "B"], in: host)
       probe.shouldFailScan = false
       NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
-      try await eventually { probe.inventoryCalls == initialQueries + ["B", "B", "B", "B"] }
+      try await eventually {
+        probe.inventoryCalls == initialQueries + ["B", "B", "B", "B"]
+          && accessibilityElement("simulator-refresh-warning", in: host) == nil
+      }
       try require(
         probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
         "Discovery failure and recovery must keep the browser, filters, and catalog alive.")
@@ -139,6 +154,17 @@ struct CatalogNavigationTests {
 
   private static func views<T: NSView>(_ type: T.Type, in view: NSView) -> [T] {
     (view as? T).map { [$0] } ?? view.subviews.flatMap { views(type, in: $0) }
+  }
+
+  private static func accessibilityElement(_ id: String, in view: NSView) -> AnyObject? {
+    var pending: [AnyObject] = [view]
+    var visited: Set<ObjectIdentifier> = []
+    while let element = pending.popLast() {
+      guard visited.insert(ObjectIdentifier(element)).inserted else { continue }
+      if element.accessibilityIdentifier?() == id { return element }
+      pending.append(contentsOf: (element.accessibilityChildren?() ?? []).map { $0 as AnyObject })
+    }
+    return nil
   }
 
   private static func checkNoRefresh(

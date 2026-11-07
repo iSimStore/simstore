@@ -209,8 +209,8 @@ struct SimulatorStoreTests {
     await probe.finish()
     fixture.devices = [device("A", state: .booted)]
     fixture.finishScan(with: [device("A")])
-    _ = await refresh.value
-    _ = await coalesced.value
+    try require(await refresh.value, "The owner must report its successful scan.")
+    try require(await coalesced.value, "A waiter must report the shared scan's success.")
     try require(
       await startup.value, "Fresh readiness after an overlapping scan should report success.")
     try require(

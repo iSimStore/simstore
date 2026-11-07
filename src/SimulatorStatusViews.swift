@@ -23,6 +23,8 @@ struct SimulatorRefreshWarningView: View {
     .font(.system(size: 12))
     .padding(12)
     .background(Color.orange.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("simulator-refresh-warning")
   }
 }
 
