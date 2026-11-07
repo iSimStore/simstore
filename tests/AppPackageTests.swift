@@ -7,6 +7,8 @@ enum AppPackageTests {
     try invalidArchives()
     try invalidBundles()
     try frameworks()
+    try nestedBundles()
+    try symlinkBoundaries()
   }
 
   static func checksums() throws {
@@ -164,6 +166,61 @@ enum AppPackageTests {
     try expectFailure {
       try AppPackage.validate(
         bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+    }
+  }
+
+  static func nestedBundles() throws {
+    let directory = try InstallationFixtures.temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let bundle = try InstallationFixtures.bundle(in: directory)
+    let nested = bundle.appending(path: "PlugIns/Extension.appex")
+    try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+    let info = nested.appending(component: "Info.plist")
+    let binary = nested.appending(component: "Extension")
+    try InstallationFixtures.info(executable: "Extension").write(to: info)
+    try InstallationFixtures.executable(InstallationFixtures.machO(), at: binary)
+    try AppPackage.validate(
+      bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+    try InstallationFixtures.info(executable: "Extension", platform: "iPhoneOS").write(to: info)
+    do {
+      try AppPackage.validate(
+        bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+      throw InstallationFixtures.failure("Reject nested bundles built for physical devices.")
+    } catch AppPackage.Failure.invalidBundle {}
+    try InstallationFixtures.info(executable: "Extension").write(to: info)
+    try InstallationFixtures.machO(platform: 1).write(to: binary)
+    do {
+      try AppPackage.validate(
+        bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+      throw InstallationFixtures.failure("Reject a nested binary for the wrong platform.")
+    } catch AppPackage.Failure.unsupportedBinary {}
+    try Data("not a binary".utf8).write(to: binary)
+    do {
+      try AppPackage.validate(
+        bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+      throw InstallationFixtures.failure("Require a Mach-O executable for a nested bundle.")
+    } catch AppPackage.Failure.invalidBundle {}
+  }
+
+  static func symlinkBoundaries() throws {
+    let directory = try InstallationFixtures.temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let bundle = try InstallationFixtures.bundle(in: directory)
+    let link = bundle.appending(component: "alias")
+    try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "Info.plist")
+    try AppPackage.validate(
+      bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+    try FileManager.default.removeItem(at: link)
+    let sibling = directory.appending(component: "Example.app-sibling")
+    try Data("outside".utf8).write(to: sibling)
+    for target in [sibling.path, "missing-file"] {
+      try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: target)
+      do {
+        try AppPackage.validate(
+          bundle, app: InstallationFixtures.app(), version: InstallationFixtures.version())
+        throw InstallationFixtures.failure("Reject escaping or dangling symlinks.")
+      } catch AppPackage.Failure.invalidBundle {}
+      try FileManager.default.removeItem(at: link)
     }
   }
 

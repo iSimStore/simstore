@@ -56,79 +56,43 @@ enum AppPackage {
       let actualVersion = info["CFBundleShortVersionString"] as? String,
       CatalogVersionNumber(actualVersion) == CatalogVersionNumber(version.version)
     else { throw Failure.wrongApp }
-    var required: Set<URL> = []
-    var checked: Set<URL> = []
-    var enumerationError: Error?
-    guard
-      let files = FileManager.default.enumerator(
-        at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey],
-        errorHandler: { _, error in
-          enumerationError = error
-          return false
-        })
-    else { throw Failure.invalidBundle }
     let mainExecutable = try executable(in: root, info: info)
-    required.insert(mainExecutable)
     try validatePlatform(info)
-    for case let path as URL in files {
-      try Task.checkCancellation()
-      let resolved = path.resolvingSymlinksInPath().standardizedFileURL
-      guard resolved.pathComponents.starts(with: root.pathComponents),
-        FileManager.default.fileExists(atPath: resolved.path)
-      else { throw Failure.invalidBundle }
-      if ["app", "appex", "framework"].contains(path.pathExtension) {
-        let nestedInfo = try bundleInfo(path)
-        required.insert(try executable(in: path, info: nestedInfo))
-        if path.pathExtension != "framework" { try validatePlatform(nestedInfo) }
-      }
-      guard try path.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true,
-        !checked.contains(resolved)
-      else { continue }
-      let file = try FileHandle(forReadingFrom: path)
-      let magic = try file.read(upToCount: 4)
-      try file.close()
-      guard let magic, MachOValidation.isMachO(magic)
-      else { continue }
-      let data = try Data(contentsOf: path, options: .mappedIfSafe)
-      try validateMachO(data, isMainExecutable: resolved == mainExecutable)
-      checked.insert(resolved)
-    }
-    if let enumerationError { throw enumerationError }
-    guard required.isSubset(of: checked) else { throw Failure.invalidBundle }
+    let validator = BundleValidator(
+      platform: UInt32(PLATFORM_IOSSIMULATOR), invalidBundle: Failure.invalidBundle,
+      binaryFailure: { error in
+        if error is MachOValidation.Failure { return Failure.unsupportedBinary }
+        return error
+      })
+    try validator.validate(
+      root, required: [mainExecutable], isExecutable: { $0 == mainExecutable },
+      nestedExecutable: { path in
+        guard ["app", "appex", "framework"].contains(path.pathExtension) else { return nil }
+        let info = try bundleInfo(path)
+        let executable = try executable(in: path, info: info)
+        if path.pathExtension != "framework" { try validatePlatform(info) }
+        return executable
+      })
   }
 
   private static func bundleInfo(_ bundle: URL) throws -> [String: Any] {
     let candidates = [
       bundle.appending(path: "Info.plist"), bundle.appending(path: "Resources/Info.plist"),
     ]
-    guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
-      let info = try PropertyListSerialization.propertyList(
-        from: Data(contentsOf: path), format: nil) as? [String: Any]
+    guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
     else { throw Failure.invalidBundle }
-    return info
+    return try BundleValidator.info(at: path, invalidBundle: Failure.invalidBundle)
   }
 
   private static func executable(in bundle: URL, info: [String: Any]) throws -> URL {
-    guard let name = info["CFBundleExecutable"] as? String, !name.isEmpty,
-      name != ".", name != "..", !name.contains("/"),
-      FileManager.default.isExecutableFile(atPath: bundle.appending(component: name).path)
-    else { throw Failure.invalidBundle }
-    return bundle.appending(component: name).resolvingSymlinksInPath().standardizedFileURL
+    try BundleValidator.executable(
+      in: bundle, named: info["CFBundleExecutable"], invalidBundle: Failure.invalidBundle)
   }
 
   private static func validatePlatform(_ info: [String: Any]) throws {
     guard info["CFBundleSupportedPlatforms"] as? [String] == ["iPhoneSimulator"],
       let minimum = info["MinimumOSVersion"] as? String, CatalogVersionNumber(minimum) != nil
     else { throw Failure.invalidBundle }
-  }
-
-  private static func validateMachO(_ data: Data, isMainExecutable: Bool) throws {
-    do {
-      _ = try MachOValidation.validate(
-        data, platform: UInt32(PLATFORM_IOSSIMULATOR), isExecutable: isMainExecutable)
-    } catch {
-      throw Failure.unsupportedBinary
-    }
   }
 
   enum Failure: LocalizedError {

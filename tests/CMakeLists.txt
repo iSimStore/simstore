@@ -75,7 +75,9 @@ add_executable(SimStoreInstallationTest AppInstallationTests.swift AppInstallBut
     "${PROJECT_SOURCE_DIR}/src/AppConfiguration.swift"
     "${PROJECT_SOURCE_DIR}/src/AppDownload.swift"
     "${PROJECT_SOURCE_DIR}/src/AppPackage.swift"
+    "${PROJECT_SOURCE_DIR}/src/PackagePipeline.swift"
     "${PROJECT_SOURCE_DIR}/src/MachOValidation.swift"
+    "${PROJECT_SOURCE_DIR}/src/BundleValidator.swift"
     "${PROJECT_SOURCE_DIR}/src/AppInstaller.swift"
     "${PROJECT_SOURCE_DIR}/src/AppInstallationPhase.swift"
     "${PROJECT_SOURCE_DIR}/src/AppInstallationStore.swift"
@@ -252,7 +254,9 @@ add_executable(SimStoreSelfUpdateTest
     "${PROJECT_SOURCE_DIR}/src/AppConfiguration.swift"
     "${PROJECT_SOURCE_DIR}/src/AppDownload.swift"
     "${PROJECT_SOURCE_DIR}/src/AppPackage.swift"
+    "${PROJECT_SOURCE_DIR}/src/PackagePipeline.swift"
     "${PROJECT_SOURCE_DIR}/src/MachOValidation.swift"
+    "${PROJECT_SOURCE_DIR}/src/BundleValidator.swift"
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
     "${PROJECT_SOURCE_DIR}/src/AppInstallationPhase.swift"
     "${PROJECT_SOURCE_DIR}/src/DownloadProgressView.swift"
@@ -269,6 +273,7 @@ add_executable(SimStoreSelfUpdateIntegrationTest
     "${PROJECT_SOURCE_DIR}/src/SelfUpdateInstallation.swift"
     "${PROJECT_SOURCE_DIR}/src/AppCatalog.swift"
     "${PROJECT_SOURCE_DIR}/src/MachOValidation.swift"
+    "${PROJECT_SOURCE_DIR}/src/BundleValidator.swift"
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
 add_dependencies(SimStoreSelfUpdateIntegrationTest SimStore)
