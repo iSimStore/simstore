@@ -35,7 +35,7 @@ enum SelfUpdateInstallerTests {
         throw SelfUpdateFixtures.failure("Use the fixed release archive URL.")
       }
       try FileManager.default.copyItem(at: archive, to: destination)
-      progress(record.size)
+      for step in 1...10_000 { progress(Int64(step) * record.size / 10_000) }
     }
     var phases: [AppInstallationPhase] = []
     let prepared = try await updater.prepare(record) { phases.append($0) }
@@ -46,6 +46,17 @@ enum SelfUpdateInstallerTests {
     try SelfUpdateFixtures.require(
       phases.contains(.verifying) && phases.contains(.extracting),
       "Report download and preparation phases.")
+    let downloads = phases.prefix {
+      if case .downloading = $0 { return true }
+      return false
+    }
+    try SelfUpdateFixtures.require(
+      downloads.count <= 10 && downloads.last == .downloading(record.size)
+        && phases.dropFirst(downloads.count).allSatisfy {
+          if case .downloading = $0 { return false }
+          return true
+        },
+      "Coalesce self-update progress and deliver the final byte count before verification.")
     try SelfUpdatePackage.validate(
       SelfUpdateRequest.payload(in: prepared.directory), release: record,
       bundleID: SelfUpdateFixtures.bundleID)

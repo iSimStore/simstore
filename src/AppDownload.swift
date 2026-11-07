@@ -4,6 +4,46 @@ enum AppDownload {
   typealias Progress = @Sendable (Int64) -> Void
   typealias Fetch = @Sendable (URL, URL, @escaping Progress) async throws -> Void
 
+  static func fetch(
+    from url: URL, to destination: URL, using download: Fetch,
+    progress: @escaping @MainActor @Sendable (Int64) -> Void
+  ) async throws {
+    try Task.checkCancellation()
+    let (stream, continuation) = AsyncStream.makeStream(
+      of: Int64.self, bufferingPolicy: .bufferingNewest(1))
+    // One consumer coalesces callbacks before hopping to the main actor.
+    let updates = Task.detached(priority: .utility) {
+      let clock = ContinuousClock()
+      var nextUpdate = clock.now
+      for await bytes in stream {
+        do {
+          try await clock.sleep(until: nextUpdate)
+          try Task.checkCancellation()
+        } catch { break }
+        await progress(bytes)
+        nextUpdate = clock.now.advanced(by: .milliseconds(100))
+      }
+    }
+    try await withTaskCancellationHandler {
+      do {
+        try await download(url, destination) { continuation.yield($0) }
+        try Task.checkCancellation()
+        continuation.finish()
+        // Deliver the final sample before a caller advances to verification.
+        await updates.value
+        try Task.checkCancellation()
+      } catch {
+        updates.cancel()
+        continuation.finish()
+        await updates.value
+        throw error
+      }
+    } onCancel: {
+      updates.cancel()
+      continuation.finish()
+    }
+  }
+
   static func fetch(from url: URL, to destination: URL, progress: @escaping Progress) async throws {
     try Task.checkCancellation()
     guard !FileManager.default.fileExists(atPath: destination.path) else {

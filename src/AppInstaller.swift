@@ -22,8 +22,8 @@ struct AppInstaller: Sendable {
     let url = AppConfiguration.assetURL(
       appID: app.id, version: version.version, filename: "\(app.id).app.tar.bz2")
     await progress(.downloading(0))
-    try await download(url, archive) { bytes in
-      Task { @MainActor in progress(.downloading(bytes)) }
+    try await AppDownload.fetch(from: url, to: archive, using: download) { bytes in
+      progress(.downloading(bytes))
     }
     try Task.checkCancellation()
     await progress(.verifying)
