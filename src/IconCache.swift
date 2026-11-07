@@ -16,6 +16,7 @@ actor IconCache {
   }
 
   typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+  typealias Decoder = @Sendable (Data) -> CGImage?
   static let shared = IconCache()
   private static let logger = Logger(
     subsystem: AppConfiguration.applicationIdentifier, category: "Icons")
@@ -24,6 +25,8 @@ actor IconCache {
   private let diskLimit: Int
   private let maximumConcurrentDownloads: Int
   private let transport: Transport
+  private let decoder: Decoder
+  private let diskQueue = DispatchQueue(label: "SimStore.IconCache.disk", qos: .utility)
   private let memory = NSCache<NSString, CGImage>()
   private var requests: [Key: Task<CGImage, Error>] = [:]
   private var activeDownloads = 0
@@ -35,12 +38,14 @@ actor IconCache {
     memoryLimit: Int = 32 * 1024 * 1024,
     diskLimit: Int = 64 * 1024 * 1024,
     maximumConcurrentDownloads: Int = 4,
+    decoder: Decoder? = nil,
     transport: Transport? = nil
   ) {
     precondition(memoryLimit > 0 && diskLimit >= 0 && maximumConcurrentDownloads > 0)
     self.directory = directory
     self.diskLimit = diskLimit
     self.maximumConcurrentDownloads = maximumConcurrentDownloads
+    self.decoder = decoder ?? Self.decode
     memory.totalCostLimit = memoryLimit
     if let transport {
       self.transport = transport
@@ -57,7 +62,8 @@ actor IconCache {
     try Task.checkCancellation()
     let path = directory.appending(component: key.filename)
     if let image = memory.object(forKey: key.filename as NSString) {
-      touch(path)
+      await onDisk { Self.touch(path) }
+      try Task.checkCancellation()
       return image
     }
     if let request = requests[key] {
@@ -85,16 +91,19 @@ actor IconCache {
   }
 
   private func load(_ key: Key, from path: URL) async throws -> CGImage {
-    if let data = try? Data(contentsOf: path) {
-      if let image = Self.decode(data) {
-        touch(path)
-        trimDiskOnce()
-        remember(image, for: key)
-        return image
-      }
-      try? FileManager.default.removeItem(at: path)
+    let decoder = decoder
+    let (hadFile, cached) = await Task.detached(priority: .utility) { () -> (Bool, CGImage?) in
+      guard let data = try? Data(contentsOf: path) else { return (false, nil) }
+      return (true, decoder(data))
+    }.value
+    if let image = cached {
+      await onDisk { Self.touch(path) }
+      await trimDiskOnce()
+      remember(image, for: key)
+      return image
     }
-    trimDiskOnce()
+    if hadFile { await onDisk { try? FileManager.default.removeItem(at: path) } }
+    await trimDiskOnce()
 
     await acquireDownload()
     defer { releaseDownload() }
@@ -105,16 +114,21 @@ actor IconCache {
     guard (200..<300).contains(response.statusCode) else {
       throw Failure.httpStatus(response.statusCode)
     }
-    guard let image = Self.decode(data) else { throw Failure.invalidImage }
+    let decoded = await Task.detached(priority: .utility) { decoder(data) }.value
+    guard let image = decoded else { throw Failure.invalidImage }
     remember(image, for: key)
+    let directory = directory
+    let diskLimit = diskLimit
     if data.count <= diskLimit {
-      do {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try data.write(to: path, options: .atomic)
-        trimDisk()
-      } catch {
-        Self.logger.error(
-          "Could not save icon cache: \(error.localizedDescription, privacy: .public)")
+      await onDisk {
+        do {
+          try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+          try data.write(to: path, options: .atomic)
+          Self.trimDisk(in: directory, limit: diskLimit)
+        } catch {
+          Self.logger.error(
+            "Could not save icon cache: \(error.localizedDescription, privacy: .public)")
+        }
       }
     }
     return image
@@ -141,18 +155,30 @@ actor IconCache {
     }
   }
 
-  private func touch(_ path: URL) {
-    try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: path.path)
-  }
-
-  private func trimDiskOnce() {
-    if !hasTrimmedDisk {
-      hasTrimmedDisk = true
-      trimDisk()
+  // Serialize disk mutations so concurrent loads cannot race recency updates or eviction.
+  private func onDisk(_ operation: @escaping @Sendable () -> Void) async {
+    await withCheckedContinuation { continuation in
+      diskQueue.async {
+        operation()
+        continuation.resume()
+      }
     }
   }
 
-  private func trimDisk() {
+  private static func touch(_ path: URL) {
+    try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: path.path)
+  }
+
+  private func trimDiskOnce() async {
+    if !hasTrimmedDisk {
+      hasTrimmedDisk = true
+      let directory = directory
+      let diskLimit = diskLimit
+      await onDisk { Self.trimDisk(in: directory, limit: diskLimit) }
+    }
+  }
+
+  private static func trimDisk(in directory: URL, limit: Int) {
     let properties: Set<URLResourceKey> = [
       .isRegularFileKey, .fileSizeKey, .contentModificationDateKey,
     ]
@@ -171,7 +197,7 @@ actor IconCache {
       $0.date == $1.date ? $0.url.lastPathComponent < $1.url.lastPathComponent : $0.date < $1.date
     }
     var size = entries.reduce(0) { $0 + $1.size }
-    for entry in entries where size > diskLimit {
+    for entry in entries where size > limit {
       do {
         try FileManager.default.removeItem(at: entry.url)
         size -= entry.size

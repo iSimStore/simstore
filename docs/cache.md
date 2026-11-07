@@ -38,6 +38,8 @@ A new app version or recipe revision changes the key. Description, translation, 
 
 The lookup order is decoded memory cache, disk, then network. ImageIO decodes images off the main thread with a maximum edge of 256 pixels; smaller images retain their original dimensions. The `NSCache` cost is `bytesPerRow * height`, with a target of 32 MiB. This is an eviction hint, not a strict process-memory limit or a preallocated buffer. View and GPU allocations are outside that cost.
 
+Disk reads and image decoding run in detached utility tasks, allowing memory hits and unrelated downloads to finish while an image is being decoded. A serial utility queue handles disk writes, recency updates, corrupt-file removal, and eviction. The cache actor owns the decoded memory cache, shared requests, and download slots.
+
 The original downloaded image bytes are saved atomically in `icons/<key>.png` after a successful HTTP response and image decoding. The disk budget is 64 MiB of file contents, rather than allocated filesystem blocks. An entry larger than the entire budget is displayed and cached in memory but is not written to disk. A persistence failure is logged and does not hide a valid image.
 
 Disk cleanup runs on the first disk access and after a successful write. Modification times record use, including memory hits. When over budget, the least recently used files are removed first. Only regular PNG files with generated 64-character lowercase hexadecimal names participate in cleanup. Old build entries remain until evicted; valid images have no time-based expiry. Neither budget is preallocated.

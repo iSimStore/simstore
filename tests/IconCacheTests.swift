@@ -11,8 +11,10 @@ struct IconCacheTests {
       try await versionsAndDownsampling()
       try await failuresAndRecovery()
       try await sharedRequestsAndCancellation()
+      try await decodingDoesNotBlockOtherRequests()
       try await downloadLimit()
       try await diskEviction()
+      try await concurrentDiskEviction()
       try await diskFailureAndOversizedEntry()
       print(
         "PASS: icon memory/disk caches, invalidation, decoding, shared requests, cancellation, concurrency, and eviction."
@@ -162,6 +164,86 @@ struct IconCacheTests {
       await probe.calls.count == 1, "An already canceled request must not reach the network.")
   }
 
+  static func decodingDoesNotBlockOtherRequests() async throws {
+    for cached in [true, false] {
+      let directory = try temporaryDirectory()
+      defer { try? FileManager.default.removeItem(at: directory) }
+      let data = try png()
+      let blockedData = Data("slow image".utf8)
+      guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+        let decoded = CGImageSourceCreateImageAtIndex(source, 0, nil)
+      else { throw failure("Decode the image fixture.") }
+      let started = DispatchSemaphore(value: 0)
+      let release = DispatchSemaphore(value: 0)
+      defer { release.signal() }
+      let probe = IconTransport(data: data)
+      let cache = IconCache(
+        directory: directory, maximumConcurrentDownloads: 2,
+        decoder: { bytes in
+          if bytes == blockedData {
+            started.signal()
+            guard release.wait(timeout: .now() + 5) == .success else { return nil }
+          }
+          return decoded
+        },
+        transport: { try await probe.send($0) })
+      let warmKey = key("warm")
+      let warm = try await cache.image(for: warmKey)
+      let blockedKey = key("blocked")
+      if cached {
+        try blockedData.write(to: directory.appending(component: blockedKey.filename))
+      } else {
+        await probe.configure(data: blockedData)
+      }
+      let owner = Task { try await cache.image(for: blockedKey) }
+      let didStart = await Task.detached {
+        waitForDecode(started)
+      }.value
+      try require(didStart, "Start decoding before checking other requests.")
+      owner.cancel()
+      let waiter = Task { try await cache.image(for: blockedKey) }
+      await probe.configure(data: data)
+      var memoryFinished = false
+      let memoryHit = Task {
+        let image = try await cache.image(for: warmKey)
+        memoryFinished = true
+        return image
+      }
+      var downloadFinished = false
+      let download = Task {
+        let image = try await cache.image(for: key("independent"))
+        downloadFinished = true
+        return image
+      }
+      let progressed: Bool
+      do {
+        try await eventually { memoryFinished && downloadFinished }
+        progressed = true
+      } catch {
+        progressed = false
+      }
+      release.signal()
+      _ = try await waiter.value
+      do {
+        _ = try await owner.value
+        throw failure("A canceled caller must not apply an image after decoding.")
+      } catch is CancellationError {}
+      let memoryImage = try await memoryHit.value
+      _ = try await download.value
+      try require(
+        progressed && memoryImage === warm,
+        "A blocked disk or network image decoder must allow memory hits and unrelated downloads to finish."
+      )
+      try require(
+        await probe.calls.count == (cached ? 2 : 3),
+        "Keep sharing the blocked request after its original caller is canceled.")
+    }
+  }
+
+  nonisolated static func waitForDecode(_ started: DispatchSemaphore) -> Bool {
+    started.wait(timeout: .now() + 5) == .success
+  }
+
   static func downloadLimit() async throws {
     let directory = try temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -223,6 +305,37 @@ struct IconCacheTests {
     try require(
       FileManager.default.fileExists(atPath: unrelated.path),
       "Only manage files with generated cache names.")
+  }
+
+  static func concurrentDiskEviction() async throws {
+    let directory = try temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let data = try png()
+    let limit = data.count * 2
+    let probe = IconTransport(data: data, suspended: true)
+    let cache = IconCache(
+      directory: directory, diskLimit: limit, transport: { try await probe.send($0) })
+    let keys = (0..<7).map { key("concurrent-\($0)") }
+    let jobs = keys.map { id in Task { try await cache.image(for: id) } }
+    try await eventually { await probe.calls.count == 4 }
+    await probe.releaseAll()
+    for job in jobs { _ = try await job.value }
+    let retained = keys.filter {
+      FileManager.default.fileExists(atPath: directory.appending(component: $0.filename).path)
+    }
+    let totalSize = try retained.reduce(0) {
+      $0 + (try Data(contentsOf: directory.appending(component: $1.filename))).count
+    }
+    try require(
+      retained.count == 2 && totalSize <= limit,
+      "Concurrent saves must respect the disk budget without evicting more files than necessary.")
+    let offline = IconCache(
+      directory: directory, diskLimit: limit,
+      transport: { _ in throw URLError(.notConnectedToInternet) })
+    for id in retained {
+      let image = try await offline.image(for: id)
+      try require(image.width == 152, "Retained concurrent writes must remain valid offline.")
+    }
   }
 
   static func diskFailureAndOversizedEntry() async throws {
