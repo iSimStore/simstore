@@ -113,6 +113,7 @@ struct ContentView: View {
           section: $librarySection, updateCount: updateCount,
           selectedDeviceID: simulators.selectedDeviceID,
           selectDevice: simulators.selectDevice,
+          startDevice: startSimulator,
           openRepository: openRepository
         )
         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
@@ -256,6 +257,10 @@ struct ContentView: View {
 
   private func startSimulator() {
     guard let id = simulators.selectedDeviceID else { return }
+    startSimulator(id)
+  }
+
+  private func startSimulator(_ id: String) {
     Task {
       let started = await simulators.startDevice(id)
       if started, let device = simulators.selectedDevice, device.id == id {
