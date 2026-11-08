@@ -4,6 +4,7 @@ import Foundation
 struct AppCatalogTests {
   static func main() throws {
     try decodeAndSort()
+    try largeVersionComponents()
     try localizationAndCompatibility()
     try compatibleUpdates()
     try rejectInvalidCatalogs()
@@ -27,6 +28,14 @@ struct AppCatalogTests {
       build.id == "1.10.0" && build.size == 1000 && build.time == 1_793_544_257,
       "Preserve build identity, archive size, and Unix timestamp.")
     try require(try decode(apps: []).apps.isEmpty, "A valid empty catalog is allowed.")
+  }
+
+  static func largeVersionComponents() throws {
+    let expected = ["\(Int.max).1.0", "\(Int.max - 1).99.99", "10.0.0", "2.10.0", "2.9.999"]
+    let entry = try decode(apps: [app(versions: expected.reversed().map { version($0) })]).apps[0]
+    try require(
+      entry.versions.map(\.version) == expected,
+      "Sort numeric components without lexicographic ordering or integer packing overflow.")
   }
 
   static func localizationAndCompatibility() throws {
@@ -107,7 +116,9 @@ struct AppCatalogTests {
     }
     for (field, value) in [
       ("version", "v1.0.0"), ("version", "1.0.0-beta"), ("version", "01.0.0"),
+      ("version", "\(Int.max)0.0.0"), ("version", "1.0.\(Int.max)0"),
       ("minSimulatorOS", "16.x"), ("minSimulatorOS", "16..0"),
+      ("minSimulatorOS", "\(Int.max)0"),
       ("sha256", "abc"), ("revision", "main"), ("recipeRevision", "abcdef"),
     ] {
       var invalid = version("1.0.0")

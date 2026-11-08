@@ -130,10 +130,13 @@ extension CatalogApp: Decodable {
       !decodedVersions.isEmpty,
       Set(decodedVersions.map(\.version)).count == decodedVersions.count
     else { throw AppCatalogError.invalidCatalog }
-    versions = decodedVersions.sorted {
-      // Decoding a CatalogVersion already validates its numeric version.
-      CatalogVersionNumber($0.version)! > CatalogVersionNumber($1.version)!
+    let parsedVersions = try decodedVersions.map { version in
+      guard let number = CatalogVersionNumber(version.version) else {
+        throw AppCatalogError.invalidCatalog
+      }
+      return (version: version, number: number)
     }
+    versions = parsedVersions.sorted { $0.number > $1.number }.map(\.version)
   }
 }
 
