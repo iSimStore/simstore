@@ -2,6 +2,7 @@ import Foundation
 
 enum SelfUpdateModelTests {
   static func run() throws {
+    try largeVersionComponents()
     let nightly = try SelfUpdateFixtures.release(["tag": "latest", "build": 8])
     let stable = try SelfUpdateFixtures.release()
     let old = try SelfUpdateFixtures.release(["tag": "0.1.10", "version": "0.1.10"])
@@ -51,6 +52,9 @@ enum SelfUpdateModelTests {
       ["build": -1], ["build": "0"], ["size": 0], ["time": -1], ["revision": "abc"],
       ["sha256": "xyz"],
       ["minOS": "0"], ["minOS": "14.0.0.1"],
+      ["version": "\(Int.max)0.0.0", "tag": "\(Int.max)0.0.0"],
+      ["version": "1.0.\(Int.max)0", "tag": "1.0.\(Int.max)0"],
+      ["minOS": "\(Int.max)0"],
     ]
     for value in invalid {
       try SelfUpdateFixtures.rejects { _ = try SelfUpdateFixtures.release(value) }
@@ -61,5 +65,26 @@ enum SelfUpdateModelTests {
     print(
       "PASS: compatible stable priority, nightly opt-in, numeric ordering, and strict update metadata."
     )
+  }
+
+  static func largeVersionComponents() throws {
+    let highest = "\(Int.max).1.0"
+    let stable = try SelfUpdateFixtures.release(["version": highest, "tag": highest])
+    let lower = "\(Int.max - 1).99.99"
+    let previous = try SelfUpdateFixtures.release(["version": lower, "tag": lower])
+    let nightly = try SelfUpdateFixtures.release([
+      "version": highest, "tag": "latest", "build": 1,
+    ])
+    let releases = [previous, nightly, stable]
+    for versions in [releases, Array(releases.reversed())] {
+      let index = try SelfUpdateIndex.decode(SelfUpdateFixtures.index(versions))
+      try SelfUpdateFixtures.require(
+        index.recommendedUpdate(from: SelfUpdateFixtures.current(), os: "14.0") == stable,
+        "Select the highest numeric stable even when components reach Int.max.")
+      try SelfUpdateFixtures.require(
+        index.recommendedUpdate(from: SelfUpdateFixtures.current(version: highest), os: "14.0")
+          == nightly,
+        "Keep nightly opt-in and build comparison after reaching the highest stable.")
+    }
   }
 }

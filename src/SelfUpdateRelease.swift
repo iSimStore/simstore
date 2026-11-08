@@ -104,12 +104,17 @@ struct SelfUpdateIndex: Decodable, Sendable {
   }
 
   func recommendedUpdate(from current: SelfUpdateBuild, os: String) -> SelfUpdateRelease? {
-    let compatible = versions.filter { $0.isCompatible(with: os) }
-    let stable = compatible.filter { !$0.isNightly }.max {
-      CatalogVersionNumber($0.version)! < CatalogVersionNumber($1.version)!
+    let compatible = versions.compactMap {
+      release -> (release: SelfUpdateRelease, number: CatalogVersionNumber)? in
+      guard release.isCompatible(with: os), let number = CatalogVersionNumber(release.version)
+      else {
+        return nil
+      }
+      return (release: release, number: number)
     }
+    let stable = compatible.filter { !$0.release.isNightly }.max { $0.number < $1.number }?.release
     if let stable, stable.isNewer(than: current) { return stable }
-    return compatible.first { $0.isNightly && $0.isNewer(than: current) }
+    return compatible.first { $0.release.isNightly && $0.release.isNewer(than: current) }?.release
   }
 }
 
