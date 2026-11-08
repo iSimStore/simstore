@@ -9,6 +9,7 @@ struct SelfUninstallTests {
     do {
       guard CommandLine.arguments.count == 2 else { throw failure("Expected the built app path.") }
       try cleanupScope()
+      try await processStopWait()
       try await confirmation()
       try await helperIntegration(source: URL(fileURLWithPath: CommandLine.arguments[1]))
       print(
@@ -73,6 +74,60 @@ struct SelfUninstallTests {
         throw failure("Reject invalid application identifiers.")
       } catch is SelfUninstallError {}
     }
+  }
+
+  private static func processStopWait() async throws {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    process.arguments = ["30"]
+    try process.run()
+    let pid = process.processIdentifier
+    defer {
+      if process.isRunning {
+        kill(pid, SIGCONT)
+        process.terminate()
+      }
+    }
+    var started = false
+    let waiting = Task {
+      started = true
+      try await SelfUninstallation.waitUntilStopped(pid, timeout: .seconds(2))
+    }
+    try await eventually { started }
+    try require(kill(pid, SIGSTOP) == 0, "Stop the owned child while its status is being awaited.")
+    do {
+      try await waiting.value
+    } catch {
+      throw failure("Waiting for process suspension must leave the main actor responsive.")
+    }
+    try require(isStopped(pid), "Confirm suspension before allowing cleanup to proceed.")
+    try require(kill(pid, SIGCONT) == 0, "Resume the child before testing unsuccessful waits.")
+    try await eventually { !isStopped(pid) }
+    do {
+      try await SelfUninstallation.waitUntilStopped(pid, timeout: .milliseconds(30))
+      throw failure("A process that does not stop must reach the suspension deadline.")
+    } catch SelfUninstallError.helperFailed {}
+    var cancelStarted = false
+    let canceled = Task {
+      cancelStarted = true
+      try await SelfUninstallation.waitUntilStopped(pid)
+    }
+    try await eventually { cancelStarted }
+    canceled.cancel()
+    do {
+      try await canceled.value
+      throw failure("Canceling a suspension wait must throw CancellationError.")
+    } catch is CancellationError {}
+    try require(
+      process.isRunning && !isStopped(pid),
+      "Unsuccessful waits must leave the running child intact.")
+  }
+
+  private static func isStopped(_ pid: Int32) -> Bool {
+    var info = proc_bsdinfo()
+    return proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout.size(ofValue: info)))
+      > 0
+      && info.pbi_status == SSTOP
   }
 
   private static func confirmation() async throws {

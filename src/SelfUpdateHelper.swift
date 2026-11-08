@@ -8,7 +8,7 @@ struct SelfUpdateHelper {
       let directory = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
         .standardizedFileURL
       do {
-        try SelfUninstallation.run(from: directory)
+        try await SelfUninstallation.run(from: directory)
       } catch {
         var message = error.localizedDescription
         if let uninstallError = error as? SelfUninstallError,
