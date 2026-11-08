@@ -54,9 +54,12 @@ enum AppUpdateBatchTests {
     store.updateAll(in: catalog, installedApps: inventory, on: device)
     let firstID = store.updateBatch(deviceID: device.id)?.id
     try InstallationFixtures.require(
-      store.hasOperations(deviceID: device.id)
-        && !store.hasOperations(deviceID: "another-device"),
-      "Queued updates must report activity only for their own device.")
+      store.updateBatch(deviceID: device.id)?.isRunning == true
+        && store.updateBatch(deviceID: "another-device") == nil
+        && ["alpha", "bravo"].allSatisfy {
+          store.phase(appID: $0, deviceID: "another-device") == nil
+        },
+      "Queued updates must create a running batch and reserve apps only on their own device.")
     try InstallationFixtures.require(
       store.phase(appID: "bravo", deviceID: device.id) == .queued,
       "Reserve queued apps before returning to the UI.")
@@ -87,8 +90,9 @@ enum AppUpdateBatchTests {
     await downloads.finish(1)
     try await finished(store, device.id)
     try InstallationFixtures.require(
-      !store.hasOperations(deviceID: device.id),
-      "Completed batch results must not report ongoing operations.")
+      store.updateBatch(deviceID: device.id)?.isRunning == false
+        && ["alpha", "bravo"].allSatisfy { store.phase(appID: $0, deviceID: device.id) == nil },
+      "Completed batches must stop running and release every member's operation slot.")
     try InstallationFixtures.require(
       store.updateBatch(deviceID: device.id)?.updated == 2
         && store.updateBatch(deviceID: device.id)?.completed == 2,
@@ -166,8 +170,9 @@ enum AppUpdateBatchTests {
     try await downloads.waitForCount(2)
     store.cancelAllUpdates(deviceID: device.id)
     try InstallationFixtures.require(
-      store.hasOperations(deviceID: device.id),
-      "Canceling must report activity until active operations finish cleaning up.")
+      store.updateBatch(deviceID: device.id)?.isRunning == true
+        && store.updateBatch(deviceID: device.id)?.isStopping == true,
+      "Canceling must keep the batch running until active operations finish cleaning up.")
     try InstallationFixtures.require(
       store.phase(appID: "alpha", deviceID: device.id) == .canceling
         && store.phase(appID: "charlie", deviceID: device.id) == nil,
