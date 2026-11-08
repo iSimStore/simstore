@@ -54,6 +54,42 @@ enum AppDownloadTests {
     try InstallationFixtures.require(
       try Data(contentsOf: destination) == payload,
       "Preserve a pre-existing file when a download cannot start.")
+    try await terminalFailures(in: directory)
+  }
+
+  @MainActor
+  static func terminalFailures(in directory: URL) async throws {
+    let partial = Data("partial".utf8)
+    let truncated = try DownloadTestServer(data: partial, contentLength: partial.count * 2)
+    let truncatedServing = Task.detached { truncated.serve() }
+    let incomplete = directory.appending(component: "incomplete")
+    do {
+      try await AppDownload.fetch(from: truncated.url, to: incomplete) { _ in }
+      throw InstallationFixtures.failure("A truncated HTTP body must not complete successfully.")
+    } catch {
+      try InstallationFixtures.require(
+        (error as NSError).domain == NSURLErrorDomain, "Preserve the transport failure.")
+    }
+    await truncatedServing.value
+    try InstallationFixtures.require(
+      !FileManager.default.fileExists(atPath: incomplete.path), "Discard incomplete downloads.")
+
+    let server = try DownloadTestServer(data: partial)
+    let serving = Task.detached { server.serve() }
+    let unwritable = directory.appending(path: "missing-parent/archive")
+    do {
+      try await AppDownload.fetch(from: server.url, to: unwritable) { _ in }
+      throw InstallationFixtures.failure("A failed destination move must fail the download.")
+    } catch {
+      let domain = (error as NSError).domain
+      try InstallationFixtures.require(
+        domain == NSCocoaErrorDomain || domain == NSPOSIXErrorDomain,
+        "Preserve the destination file error.")
+    }
+    await serving.value
+    try InstallationFixtures.require(
+      !FileManager.default.fileExists(atPath: unwritable.path), "Do not leave a failed destination."
+    )
   }
 
   @MainActor
@@ -138,8 +174,9 @@ private final class DownloadTestServer: Sendable {
   private let socket: Int32
   private let data: Data
   private let status: Int
+  private let contentLength: Int
 
-  init(data: Data, status: Int = 200) throws {
+  init(data: Data, status: Int = 200, contentLength: Int? = nil) throws {
     let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
     guard socket >= 0 else { throw InstallationFixtures.failure("Cannot open test socket.") }
     var address = sockaddr_in()
@@ -166,6 +203,7 @@ private final class DownloadTestServer: Sendable {
     self.socket = socket
     self.data = data
     self.status = status
+    self.contentLength = contentLength ?? data.count
     url = URL(string: "http://127.0.0.1:\(UInt16(bigEndian: address.sin_port))/app.tar.bz2")!
   }
 
@@ -183,7 +221,8 @@ private final class DownloadTestServer: Sendable {
     var request = [UInt8](repeating: 0, count: 8192)
     guard recv(client, &request, request.count, 0) > 0 else { return }
     let header = Data(
-      "HTTP/1.1 \(status) Test\r\nContent-Length: \(data.count)\r\nConnection: close\r\n\r\n".utf8)
+      "HTTP/1.1 \(status) Test\r\nContent-Length: \(contentLength)\r\nConnection: close\r\n\r\n"
+        .utf8)
     guard write(header, to: client) else { return }
     for offset in stride(from: 0, to: data.count, by: 32 * 1024) {
       guard write(data.subdata(in: offset..<min(data.count, offset + 32 * 1024)), to: client) else {
