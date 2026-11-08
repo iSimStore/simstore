@@ -1,16 +1,16 @@
 import Foundation
 
 extension SimulatorStoreTests {
-  static func shutdownTests() async throws {
-    try await shuttingDownAndSelectionChanges()
-    try await independentShutdowns()
-    try await shutdownWithOverlappingRefresh()
-    try await shutdownFailuresAndCancellation()
-    try await confirmedShutdownAndInvalidStates()
-    try await mutuallyExclusivePowerOperations()
-    print(
-      "PASS: shutdown reservation, state overlays, independent targets, stale scans, failures, and cancellation."
-    )
+  @MainActor
+  static var shutdownCases: [TestSuite.Case] {
+    [
+      .init("shutdown.shuttingDownAndSelectionChanges", shuttingDownAndSelectionChanges),
+      .init("shutdown.independentShutdowns", independentShutdowns),
+      .init("shutdown.shutdownWithOverlappingRefresh", shutdownWithOverlappingRefresh),
+      .init("shutdown.shutdownFailuresAndCancellation", shutdownFailuresAndCancellation),
+      .init("shutdown.confirmedShutdownAndInvalidStates", confirmedShutdownAndInvalidStates),
+      .init("shutdown.mutuallyExclusivePowerOperations", mutuallyExclusivePowerOperations),
+    ]
   }
 
   private static func shuttingDownAndSelectionChanges() async throws {

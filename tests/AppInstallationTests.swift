@@ -4,35 +4,29 @@ import Foundation
 @MainActor
 struct AppInstallationTests {
   static func main() async {
-    do {
-      try AppPackageTests.run()
-      try await AppDownloadTests.run()
-      try await pipeline()
-      try await preparationStopsBeforeFinalization()
-      try await failureAndCleanup()
-      try await perDeviceJobs()
-      try await presentationFailures()
-      try await cancellationDuringPreparation()
-      try await installingCannotBeCanceled()
-      try await stoppedDevice()
-      try await uninstallJobs()
-      try await uninstallFailure()
-      try await recoveryPrompts()
-      try await discoveryFailureDuringUninstall()
-      try versionActions()
-      try await replacementPipeline()
-      try await replacementWhileSwitchingDevices()
-      try await AppUpdateBatchTests.run()
-      try await updateDuringInventoryRefresh()
-      try await AppInstallButtonTests.run()
-      print(
-        "PASS: package verification, safe extraction, Simulator binaries, install/open, per-device jobs, cancellation, failures, and cleanup."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Installation test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  static var cases: [TestSuite.Case] {
+    AppPackageTests.cases + AppDownloadTests.cases + [
+      .init("pipeline", pipeline),
+      .init("preparationStopsBeforeFinalization", preparationStopsBeforeFinalization),
+      .init("failureAndCleanup", failureAndCleanup),
+      .init("perDeviceJobs", perDeviceJobs),
+      .init("presentationFailures", presentationFailures),
+      .init("cancellationDuringPreparation", cancellationDuringPreparation),
+      .init("installingCannotBeCanceled", installingCannotBeCanceled),
+      .init("stoppedDevice", stoppedDevice),
+      .init("uninstallJobs", uninstallJobs),
+      .init("uninstallFailure", uninstallFailure),
+      .init("recoveryPrompts", recoveryPrompts),
+      .init("discoveryFailureDuringUninstall", discoveryFailureDuringUninstall),
+      .init("versionActions", versionActions),
+      .init("replacementPipeline", replacementPipeline),
+      .init("replacementWhileSwitchingDevices", replacementWhileSwitchingDevices),
+      .init("updateDuringInventoryRefresh", updateDuringInventoryRefresh),
+      .init("installButton", AppInstallButtonTests.run),
+    ] + AppUpdateBatchTests.cases
   }
 
   static func pipeline() async throws {

@@ -2,7 +2,6 @@ import Foundation
 
 enum SelfUpdatePackageTests {
   static func run() throws {
-    try symlinkBoundaries()
     let directory = try SelfUpdateFixtures.directory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let release = try SelfUpdateFixtures.release()

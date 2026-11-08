@@ -5,25 +5,24 @@ import ImageIO
 @main
 @MainActor
 struct IconCacheTests {
+  @MainActor
   static func main() async {
-    do {
-      try await memoryAndOfflineDisk()
-      try await versionsAndDownsampling()
-      try await failuresAndRecovery()
-      try await sharedRequestsAndCancellation()
-      try await decodingDoesNotBlockOtherRequests()
-      try await downloadLimit()
-      try await diskEviction()
-      try await concurrentDiskEviction()
-      try await diskFailureAndOversizedEntry()
-      print(
-        "PASS: icon memory/disk caches, invalidation, decoding, shared requests, cancellation, concurrency, and eviction."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Icon cache test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("memoryAndOfflineDisk", memoryAndOfflineDisk),
+      .init("versionsAndDownsampling", versionsAndDownsampling),
+      .init("failuresAndRecovery", failuresAndRecovery),
+      .init("sharedRequestsAndCancellation", sharedRequestsAndCancellation),
+      .init("decodingDoesNotBlockOtherRequests", decodingDoesNotBlockOtherRequests),
+      .init("downloadLimit", downloadLimit),
+      .init("diskEviction", diskEviction),
+      .init("concurrentDiskEviction", concurrentDiskEviction),
+      .init("diskFailureAndOversizedEntry", diskFailureAndOversizedEntry),
+    ]
   }
 
   static func memoryAndOfflineDisk() async throws {

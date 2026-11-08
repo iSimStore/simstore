@@ -2,13 +2,20 @@ import Foundation
 
 @main
 struct AppCatalogTests {
-  static func main() throws {
-    try decodeAndSort()
-    try largeVersionComponents()
-    try localizationAndCompatibility()
-    try compatibleUpdates()
-    try rejectInvalidCatalogs()
-    print("PASS: catalog decoding, version ordering, language fallback, and compatibility.")
+  @MainActor
+  static func main() async {
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("decodeAndSort", decodeAndSort),
+      .init("largeVersionComponents", largeVersionComponents),
+      .init("localizationAndCompatibility", localizationAndCompatibility),
+      .init("compatibleUpdates", compatibleUpdates),
+      .init("rejectInvalidCatalogs", rejectInvalidCatalogs),
+    ]
   }
 
   static func decodeAndSort() throws {

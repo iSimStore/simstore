@@ -26,12 +26,20 @@
     {
       "name": "release",
       "configurePreset": "release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "${sourceDir}/build/release/test-results.xml"
+      },
+      "execution": { "noTestsAction": "error" }
     },
     {
       "name": "debug",
       "configurePreset": "debug",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true,
+        "outputJUnitFile": "${sourceDir}/build/debug/test-results.xml"
+      },
+      "execution": { "noTestsAction": "error" }
     }
   ]
 }

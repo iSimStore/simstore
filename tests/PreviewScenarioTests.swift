@@ -2,20 +2,19 @@ import Foundation
 
 @main
 struct PreviewScenarioTests {
+  @MainActor
   static func main() async {
-    do {
-      try arguments()
-      try await missingXcode()
-      try await emptyInventory()
-      try blockedDeviceActions()
-      print(
-        "PASS: Debug preview arguments, missing Xcode, empty inventory, and an isolated incompatible device."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Preview scenario test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("arguments", arguments),
+      .init("missingXcode", missingXcode),
+      .init("emptyInventory", emptyInventory),
+      .init("blockedDeviceActions", blockedDeviceActions),
+    ]
   }
 
   static func arguments() throws {

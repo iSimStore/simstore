@@ -4,26 +4,24 @@ import Foundation
 struct SimulatorApplicationsTests {
   @MainActor
   static func main() async {
-    do {
-      try decodeFormats()
-      try readInstalledBundleVersion()
-      try rejectInvalidResponses()
-      try await querySelectedDevice()
-      try await preserveCommandFailure()
-      try await rejectStoppedDevices()
-      try await rejectUnknownActions()
-      try await cancelledBeforeQuery()
-      try await cancelledDuringQuery()
-      try await uninstallSelectedUserApp()
-      try await protectOtherApps()
-      print(
-        "PASS: installed-app formats, exact device query, failures, device state, and cancellation."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Simulator applications test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("decodeFormats", decodeFormats),
+      .init("readInstalledBundleVersion", readInstalledBundleVersion),
+      .init("rejectInvalidResponses", rejectInvalidResponses),
+      .init("querySelectedDevice", querySelectedDevice),
+      .init("preserveCommandFailure", preserveCommandFailure),
+      .init("rejectStoppedDevices", rejectStoppedDevices),
+      .init("rejectUnknownActions", rejectUnknownActions),
+      .init("cancelledBeforeQuery", cancelledBeforeQuery),
+      .init("cancelledDuringQuery", cancelledDuringQuery),
+      .init("uninstallSelectedUserApp", uninstallSelectedUserApp),
+      .init("protectOtherApps", protectOtherApps),
+    ]
   }
 
   static let device = SimulatorDevice(

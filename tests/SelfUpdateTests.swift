@@ -4,16 +4,13 @@ import Foundation
 struct SelfUpdateTests {
   @MainActor
   static func main() async {
-    do {
-      try SelfUpdateModelTests.run()
-      try SelfUpdatePackageTests.run()
-      try await SelfUpdateInstallerTests.run()
-      try await SelfUpdateStoreTests.run()
-      try await SelfUpdateViewTests.run()
-    } catch {
-      FileHandle.standardError.write(
-        Data("Self-update test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(
+      [
+        .init("model", SelfUpdateModelTests.run),
+        .init("model.largeVersionComponents", SelfUpdateModelTests.largeVersionComponents),
+        .init("package", SelfUpdatePackageTests.run),
+        .init("package.symlinkBoundaries", SelfUpdatePackageTests.symlinkBoundaries),
+        .init("view", SelfUpdateViewTests.run),
+      ] + SelfUpdateInstallerTests.cases + SelfUpdateStoreTests.cases)
   }
 }

@@ -4,22 +4,20 @@ import Foundation
 struct SimulatorControlTests {
   @MainActor
   static func main() async {
-    do {
-      try await bootCommand()
-      try await commandFailure()
-      try await cancelledBeforeBoot()
-      try await cancelledDuringBoot()
-      try await shutdownCommand()
-      try await shutdownFailureAndCancellation()
-      try presentationRequests()
-      print(
-        "PASS: targeted simulator boot/shutdown, background execution, diagnostics, and cancellation."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Simulator control test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("bootCommand", bootCommand),
+      .init("commandFailure", commandFailure),
+      .init("cancelledBeforeBoot", cancelledBeforeBoot),
+      .init("cancelledDuringBoot", cancelledDuringBoot),
+      .init("shutdownCommand", shutdownCommand),
+      .init("shutdownFailureAndCancellation", shutdownFailureAndCancellation),
+      .init("presentationRequests", presentationRequests),
+    ]
   }
 
   @MainActor
