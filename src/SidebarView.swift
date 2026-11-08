@@ -10,6 +10,7 @@ struct SidebarView: View {
   let updateCount: Int?
   let selectedDeviceID: String?
   let selectDevice: (String) -> Void
+  let startDevice: (String) -> Void
   let openRepository: () -> Void
 
   private static let sectionRowHeight: CGFloat = 44
@@ -67,6 +68,14 @@ struct SidebarView: View {
                   .foregroundStyle(.secondary)
                   .frame(width: 20)
               }
+              .contentShape(Rectangle())
+              .simultaneousGesture(
+                TapGesture(count: 2).onEnded {
+                  selectDevice(device.id)
+                  startDevice(device.id)
+                },
+                including: device.state == .shutdown ? .all : .none
+              )
               .tag(device.id)
               .id(device.id)
               .listRowInsets(

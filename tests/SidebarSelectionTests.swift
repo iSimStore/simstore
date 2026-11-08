@@ -8,6 +8,8 @@ private final class SidebarState {
   var discovery: SimulatorDiscovery?
   var selectedDeviceID: String?
   var section = LibrarySection.discover
+  var startRequests: [String] = []
+  var selectionsAtStart: [String?] = []
 }
 
 private struct SidebarHarness: View {
@@ -18,7 +20,11 @@ private struct SidebarHarness: View {
       SidebarView(
         discovery: state.discovery, isChecking: false, needsXcode: false,
         section: $state.section, updateCount: nil, selectedDeviceID: state.selectedDeviceID,
-        selectDevice: { state.selectedDeviceID = $0 }, openRepository: {}
+        selectDevice: { state.selectedDeviceID = $0 },
+        startDevice: {
+          state.startRequests.append($0)
+          state.selectionsAtStart.append(state.selectedDeviceID)
+        }, openRepository: {}
       )
       .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
     }
@@ -36,6 +42,16 @@ struct SidebarSelectionTests {
       ("topClippedSelection", { try await clippedSelection($0, clipsTop: true) }),
       ("bottomClippedSelection", { try await clippedSelection($0, clipsTop: false) }),
       ("refreshAndRepopulation", refreshAndRepopulation),
+      ("singleClickShutdown", singleClickShutdown),
+      ("doubleClickShutdown", { try await doubleClickShutdown($0) }),
+      (
+        "doubleClickShutdownPadding",
+        { try await doubleClickShutdown($0, verticalFraction: 0.05) }
+      ),
+      ("doubleClickBooted", { try await doubleClickInactive($0, state: .booted) }),
+      ("doubleClickBooting", { try await doubleClickInactive($0, state: .booting) }),
+      ("doubleClickShuttingDown", { try await doubleClickInactive($0, state: .shuttingDown) }),
+      ("doubleClickUnknown", { try await doubleClickInactive($0, state: .unknown) }),
     ]
     await TestSuite.run(
       scenarios.map { name, scenario in
@@ -143,6 +159,47 @@ struct SidebarSelectionTests {
     }
   }
 
+  private static func singleClickShutdown(_ fixture: SidebarFixture) async throws {
+    let table = try await fixture.ready()
+    let index = try fixture.visibleRow(in: table, state: .shutdown)
+    try await fixture.click(index, in: table, count: 1)
+    try await fixture.wait("A single click selects the shutdown simulator.") {
+      table.selectedRow == index && fixture.state.selectedDeviceID == fixture.devices[index].id
+    }
+    try await fixture.requireNoStart()
+  }
+
+  private static func doubleClickShutdown(
+    _ fixture: SidebarFixture, verticalFraction: CGFloat = 0.5
+  ) async throws {
+    let table = try await fixture.ready()
+    let index = try fixture.visibleRow(in: table, state: .shutdown)
+    try await fixture.click(index, in: table, count: 2, verticalFraction: verticalFraction)
+    let id = fixture.devices[index].id
+    try await fixture.wait("A double click selects and starts the shutdown simulator once.") {
+      fixture.state.startRequests == [id] && fixture.state.selectionsAtStart == [id]
+        && fixture.state.selectedDeviceID == id && table.selectedRow == index
+    }
+  }
+
+  private static func doubleClickInactive(_ fixture: SidebarFixture, state: SimulatorState)
+    async throws
+  {
+    let table = try await fixture.ready()
+    let index = try fixture.visibleRow(in: table)
+    fixture.state.discovery = fixture.discovery(
+      fixture.devices.enumerated().map { position, device in
+        SimulatorDevice(
+          id: device.id, name: device.name, runtime: device.runtime,
+          state: position == index ? state : device.state)
+      })
+    try await fixture.click(index, in: table, count: 2)
+    try await fixture.wait("A double click still selects a \(state.rawValue) simulator.") {
+      table.selectedRow == index && fixture.state.selectedDeviceID == fixture.devices[index].id
+    }
+    try await fixture.requireNoStart()
+  }
+
   fileprivate static func failure(_ message: String) -> NSError {
     NSError(
       domain: "SidebarSelectionTests", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
@@ -158,6 +215,7 @@ private final class SidebarFixture {
 
   init(arguments: [String]) throws {
     NSApplication.shared.setActivationPolicy(.regular)
+    NSApplication.shared.finishLaunching()
     guard arguments.count <= 1 else {
       throw SidebarSelectionTests.failure("Expected at most one simulator inventory path.")
     }
@@ -224,6 +282,54 @@ private final class SidebarFixture {
           "Preserve scroll position: expected \(offset), got \(table.visibleRect.origin).")
       }
       try await Task.sleep(for: .milliseconds(20))
+    } while ContinuousClock.now < deadline
+  }
+
+  func visibleRow(in table: NSTableView, state: SimulatorState? = nil) throws -> Int {
+    guard
+      let index = devices.indices.first(where: {
+        $0 != selected && table.visibleRect.contains(table.rect(ofRow: $0))
+          && (state == nil || devices[$0].state == state)
+      })
+    else { throw SidebarSelectionTests.failure("Expected another visible simulator row.") }
+    return index
+  }
+
+  func click(
+    _ index: Int, in table: NSTableView, count: Int, verticalFraction: CGFloat = 0.5
+  ) async throws {
+    window.makeKeyAndOrderFront(nil)
+    guard table.visibleRect.contains(table.rect(ofRow: index)) else {
+      throw SidebarSelectionTests.failure("The clicked row must be visible.")
+    }
+    let row = table.rect(ofRow: index)
+    let point = table.convert(
+      NSPoint(x: row.midX, y: row.minY + row.height * verticalFraction), to: nil)
+    for clickCount in 1...count {
+      let timestamp = ProcessInfo.processInfo.systemUptime
+      guard
+        let down = NSEvent.mouseEvent(
+          with: .leftMouseDown, location: point, modifierFlags: [], timestamp: timestamp,
+          windowNumber: window.windowNumber, context: nil, eventNumber: clickCount * 2,
+          clickCount: clickCount, pressure: 1),
+        let up = NSEvent.mouseEvent(
+          with: .leftMouseUp, location: point, modifierFlags: [], timestamp: timestamp + 0.01,
+          windowNumber: window.windowNumber, context: nil, eventNumber: clickCount * 2 + 1,
+          clickCount: clickCount, pressure: 0)
+      else { throw SidebarSelectionTests.failure("Create the native mouse events.") }
+      NSApplication.shared.postEvent(up, atStart: false)
+      window.sendEvent(down)
+      try await Task.sleep(for: .milliseconds(20))
+    }
+  }
+
+  func requireNoStart() async throws {
+    let deadline = ContinuousClock.now.advanced(by: .milliseconds(200))
+    repeat {
+      try await Task.sleep(for: .milliseconds(20))
+      guard state.startRequests.isEmpty else {
+        throw SidebarSelectionTests.failure("The click must not request simulator startup.")
+      }
     } while ContinuousClock.now < deadline
   }
 
