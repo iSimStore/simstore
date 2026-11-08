@@ -203,8 +203,7 @@ add_executable(SimStoreSidebarSelectionTest SidebarSelectionTests.swift
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
 target_compile_options(SimStoreSidebarSelectionTest PRIVATE -parse-as-library)
-add_test(NAME sidebar-selection COMMAND SimStoreSidebarSelectionTest)
-set_tests_properties(sidebar-selection PROPERTIES TIMEOUT 15 RUN_SERIAL TRUE)
+add_swift_test_suite(sidebar-selection SimStoreSidebarSelectionTest TIMEOUT 15 RUN_SERIAL)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_executable(SimStorePreviewScenarioTest PreviewScenarioTests.swift
