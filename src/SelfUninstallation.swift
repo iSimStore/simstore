@@ -107,7 +107,7 @@ enum SelfUninstallation {
   }
 
   @MainActor
-  static func run(from directory: URL) throws {
+  static func run(from directory: URL) async throws {
     let request = try JSONDecoder().decode(
       SelfUninstallRequest.self,
       from: Data(contentsOf: directory.appending(component: "request.json")))
@@ -128,24 +128,14 @@ enum SelfUninstallation {
       FileManager.default.isWritableFile(atPath: plan.application.deletingLastPathComponent().path),
       !plan.application.pathComponents.contains("AppTranslocation")
     else { throw SelfUninstallError.notWritable }
+    try Task.checkCancellation()
     guard kill(request.parentPID, SIGSTOP) == 0 else {
       throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .ESRCH)
     }
     var completed = false
     defer { if !completed { kill(request.parentPID, SIGCONT) } }
-    // Wait for every app thread to stop before removing files its background tasks can write.
-    let deadline = Date().addingTimeInterval(5)
-    while true {
-      var info = proc_bsdinfo()
-      guard
-        proc_pidinfo(
-          request.parentPID, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout.size(ofValue: info)))
-          > 0
-      else { throw POSIXError(.ESRCH) }
-      if info.pbi_status == SSTOP { break }
-      guard Date() < deadline else { throw SelfUninstallError.helperFailed }
-      Thread.sleep(forTimeInterval: 0.01)
-    }
+    try await waitUntilStopped(request.parentPID)
+    try Task.checkCancellation()
     try clearPreferences(request.bundleID)
     try plan.removeData(excluding: directory)
     try FileManager.default.removeItem(at: plan.application)
@@ -155,6 +145,25 @@ enum SelfUninstallation {
       throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EPERM)
     }
     completed = true
+  }
+
+  @MainActor
+  static func waitUntilStopped(_ pid: Int32, timeout: Duration = .seconds(5)) async throws {
+    // Wait for every app thread to stop before removing files its background tasks can write.
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while true {
+      try Task.checkCancellation()
+      var info = proc_bsdinfo()
+      guard
+        proc_pidinfo(
+          pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout.size(ofValue: info)))
+          > 0
+      else { throw POSIXError(.ESRCH) }
+      if info.pbi_status == SSTOP { break }
+      guard clock.now < deadline else { throw SelfUninstallError.helperFailed }
+      try await Task.sleep(for: .milliseconds(10))
+    }
   }
 }
 
