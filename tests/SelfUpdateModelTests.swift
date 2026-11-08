@@ -2,7 +2,6 @@ import Foundation
 
 enum SelfUpdateModelTests {
   static func run() throws {
-    try largeVersionComponents()
     let nightly = try SelfUpdateFixtures.release(["tag": "latest", "build": 8])
     let stable = try SelfUpdateFixtures.release()
     let old = try SelfUpdateFixtures.release(["tag": "0.1.10", "version": "0.1.10"])

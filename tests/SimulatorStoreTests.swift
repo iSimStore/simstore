@@ -4,29 +4,30 @@ import Observation
 @main
 @MainActor
 struct SimulatorStoreTests {
+  @MainActor
   static func main() async {
-    do {
-      try await selectionAndRefresh()
-      try await initialFailureAndEmptyInventory()
-      try await cancelledRefreshKeepsInventory()
-      try await sharedScanRetriesAfterOwnerCancellation()
-      try await sharedScanDoesNotRetryCancelledWaiters()
-      try await sharedScanReportsFailure()
-      try await sharedScanKeepsOutcomeAfterLateCancellation()
-      try await controlRequiresSuccessfulRefresh()
-      try await startingAndSelectionChanges()
-      try await independentStarts()
-      try await overlappingRefresh()
-      try await startFailureAndCancellation()
-      try await startupRequiresConfirmedReadiness()
-      try await failedBootAfterBootedPoll()
-      try await shutdownTests()
-      print("PASS: simulator selection, refresh, concurrent startup, errors, and cancellation.")
-    } catch {
-      FileHandle.standardError.write(
-        Data("Simulator store test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("selectionAndRefresh", selectionAndRefresh),
+      .init("initialFailureAndEmptyInventory", initialFailureAndEmptyInventory),
+      .init("cancelledRefreshKeepsInventory", cancelledRefreshKeepsInventory),
+      .init("sharedScanRetriesAfterOwnerCancellation", sharedScanRetriesAfterOwnerCancellation),
+      .init("sharedScanDoesNotRetryCancelledWaiters", sharedScanDoesNotRetryCancelledWaiters),
+      .init("sharedScanReportsFailure", sharedScanReportsFailure),
+      .init(
+        "sharedScanKeepsOutcomeAfterLateCancellation", sharedScanKeepsOutcomeAfterLateCancellation),
+      .init("controlRequiresSuccessfulRefresh", controlRequiresSuccessfulRefresh),
+      .init("startingAndSelectionChanges", startingAndSelectionChanges),
+      .init("independentStarts", independentStarts),
+      .init("overlappingRefresh", overlappingRefresh),
+      .init("startFailureAndCancellation", startFailureAndCancellation),
+      .init("startupRequiresConfirmedReadiness", startupRequiresConfirmedReadiness),
+      .init("failedBootAfterBootedPoll", failedBootAfterBootedPoll),
+    ] + shutdownCases
   }
 
   static func selectionAndRefresh() async throws {

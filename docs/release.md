@@ -8,6 +8,24 @@ CMake reads the Git version at configuration and stamps the bundle's `Info.plist
 
 Local builds support dirty source trees. Packaging a release requires a clean source tree and bundle metadata matching the current commit. Stable packaging also requires an exact matching version tag and a commit belonging to `origin/main`.
 
+## Tests and reports
+
+Multi-scenario Swift test executables register named cases in `TestSuite`. CTest discovers those names from the built executables and runs each case in a separate process, preserving the suite's timeout and serial-execution settings. One failure, crash, or timeout does not prevent the remaining CTest cases from running. Single-scenario window and integration tests keep their existing registrations.
+
+Build and run the Release checks, select a suite by label, or select one case by its full name:
+
+```sh
+cmake --preset release
+cmake --build --preset release
+ctest --preset release
+ctest --preset release -L '^installation$'
+ctest --preset release -R '^installation\.queue\.cancellation$'
+```
+
+For direct execution, migrated binaries support `--list-tests` and `--case NAME`. Without a selector, they run all their named cases, report individual failures, continue after thrown errors, and return a nonzero exit status if any case failed. For example, `build/release/tests/SimStoreInstallationTest --case queue.cancellation` runs only that queue scenario. CTest labels retain the old suite names; Debug previews can be selected with `-L '^preview-scenarios$'`. An empty selection is an error, and suites that have not been rebuilt for discovery report a failing `.not-built` case.
+
+The presets write the latest invocation's JUnit report to `build/release/test-results.xml` or `build/debug/test-results.xml`. CI uploads available reports as the `test-results` artifact even when a test step fails. Add or rename cases in Swift; CTest registration is discovered rather than maintained as a second case list. The `test-suite-runner` check verifies listing, selection, nonzero failures, continued execution, discovery properties, and individual JUnit results using an intentionally failing fixture outside the normal test list.
+
 ## Build and publish
 
 The build workflow packages and uploads `SimStore.app.tar.bz2` and `release.json` before running checks. Each is uploaded as a single file without an additional ZIP archive. All checks must pass before publication.

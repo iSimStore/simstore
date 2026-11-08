@@ -2,22 +2,21 @@ import Foundation
 
 @main
 struct SimulatorDiscoveryTests {
+  @MainActor
   static func main() async {
-    do {
-      try emptyInventory()
-      try availableIOSDevices()
-      try powerStates()
-      try malformedInventory()
-      try deviceManagerLocations()
-      try await xcodeInstallationStates()
-      print(
-        "PASS: simulator inventory, Device Hub / Simulator discovery, missing Xcode, and incomplete Xcode setup."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Simulator discovery test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("emptyInventory", emptyInventory),
+      .init("availableIOSDevices", availableIOSDevices),
+      .init("powerStates", powerStates),
+      .init("malformedInventory", malformedInventory),
+      .init("deviceManagerLocations", deviceManagerLocations),
+      .init("xcodeInstallationStates", xcodeInstallationStates),
+    ]
   }
 
   static func emptyInventory() throws {

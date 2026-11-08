@@ -1,14 +1,17 @@
 import Foundation
 
 enum AppPackageTests {
-  static func run() throws {
-    try checksums()
-    try validArchiveAndBundle()
-    try invalidArchives()
-    try invalidBundles()
-    try frameworks()
-    try nestedBundles()
-    try symlinkBoundaries()
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("package.checksums", checksums),
+      .init("package.validArchiveAndBundle", validArchiveAndBundle),
+      .init("package.invalidArchives", invalidArchives),
+      .init("package.invalidBundles", invalidBundles),
+      .init("package.frameworks", frameworks),
+      .init("package.nestedBundles", nestedBundles),
+      .init("package.symlinkBoundaries", symlinkBoundaries),
+    ]
   }
 
   static func checksums() throws {

@@ -3,8 +3,20 @@ import Foundation
 
 enum AppDownloadTests {
   @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("download.transfer", run),
+      .init("download.progressDeliveryAndCompletion", progressDeliveryAndCompletion),
+      .init("download.terminalFailures") {
+        let directory = try InstallationFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await terminalFailures(in: directory)
+      },
+    ]
+  }
+
+  @MainActor
   static func run() async throws {
-    try await progressDeliveryAndCompletion()
     let directory = try InstallationFixtures.temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     let payload = Data(repeating: 0x42, count: 4 * 1024 * 1024)
@@ -54,7 +66,6 @@ enum AppDownloadTests {
     try InstallationFixtures.require(
       try Data(contentsOf: destination) == payload,
       "Preserve a pre-existing file when a download cannot start.")
-    try await terminalFailures(in: directory)
   }
 
   @MainActor

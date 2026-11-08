@@ -2,10 +2,32 @@ import Foundation
 
 enum SelfUpdateStoreTests {
   @MainActor
-  static func run() async throws {
+  static var cases: [TestSuite.Case] {
+    [
+      .init("store.checks", run),
+      .init("store.changedNightly") {
+        let fixture = try fixture()
+        try await changedNightly(initial: fixture.data, nightly: fixture.nightly)
+      },
+      .init("store.cancelInstallation") {
+        try await cancelInstallation(data: fixture().data)
+      },
+    ]
+  }
+
+  private static func fixture() throws -> (
+    release: SelfUpdateRelease, nightly: SelfUpdateRelease, data: Data
+  ) {
     let release = try SelfUpdateFixtures.release()
     let nightly = try SelfUpdateFixtures.release(["tag": "latest", "build": 8])
-    let data = try SelfUpdateFixtures.index([nightly, release])
+    return (release, nightly, try SelfUpdateFixtures.index([nightly, release]))
+  }
+
+  @MainActor
+  static func run() async throws {
+    let fixture = try fixture()
+    let release = fixture.release
+    let data = fixture.data
     let counter = RequestCounter()
     var client = SelfUpdateClient()
     client.transport = { request in
@@ -48,11 +70,6 @@ enum SelfUpdateStoreTests {
     try SelfUpdateFixtures.require(
       failed.error?.contains("503") == true && !failed.hasChecked,
       "A failed check must allow retry and never claim up-to-date.")
-    try await changedNightly(initial: data, nightly: nightly)
-    try await cancelInstallation(data: data)
-    print(
-      "PASS: cache-bypassing checks, coalesced actions, retry, changed nightly detection, and cancel state."
-    )
   }
 
   @MainActor

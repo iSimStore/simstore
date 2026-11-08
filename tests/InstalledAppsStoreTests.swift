@@ -3,26 +3,26 @@ import Foundation
 @main
 @MainActor
 struct InstalledAppsStoreTests {
+  @MainActor
   static func main() async {
-    do {
-      try await filteringAndRefresh()
-      try await switchingDevices()
-      try await staleErrors()
-      try await cancellationAndCoalescing()
-      try await refreshedDeviceState()
-      try await recordingInstallationDuringRefresh()
-      try await retainInstalledAppsForCurrentVisit()
-      try await installedVersionsAndMatching()
-      try await recordingUninstallationDuringRefresh()
-      try await updateFilteringAndRetention()
-      try await recoveryDuringRefresh()
-      print(
-        "PASS: per-device installed apps, filtering, stale responses, errors, and cancellation.")
-    } catch {
-      FileHandle.standardError.write(
-        Data("Installed apps store test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("filteringAndRefresh", filteringAndRefresh),
+      .init("switchingDevices", switchingDevices),
+      .init("staleErrors", staleErrors),
+      .init("cancellationAndCoalescing", cancellationAndCoalescing),
+      .init("refreshedDeviceState", refreshedDeviceState),
+      .init("recordingInstallationDuringRefresh", recordingInstallationDuringRefresh),
+      .init("retainInstalledAppsForCurrentVisit", retainInstalledAppsForCurrentVisit),
+      .init("installedVersionsAndMatching", installedVersionsAndMatching),
+      .init("recordingUninstallationDuringRefresh", recordingUninstallationDuringRefresh),
+      .init("updateFilteringAndRetention", updateFilteringAndRetention),
+      .init("recoveryDuringRefresh", recoveryDuringRefresh),
+    ]
   }
 
   static func recoveryDuringRefresh() async throws {

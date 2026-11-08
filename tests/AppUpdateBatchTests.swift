@@ -3,18 +3,19 @@ import Observation
 
 @MainActor
 enum AppUpdateBatchTests {
-  static func run() async throws {
-    try await selectionAndSerialExecution()
-    try await failureAndRetry()
-    try await cancellation()
-    try await cancellationDuringInstall()
-    try await separateDevices()
-    try await shutdownWhileDownloading()
-    try await observableBatchLifecycle()
-    try await refusedInstallationsReleaseReservations()
-    print(
-      "PASS: Update All selection, queue reservations, serial execution, retry, cancellation, and per-device isolation."
-    )
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("queue.selectionAndSerialExecution", selectionAndSerialExecution),
+      .init("queue.failureAndRetry", failureAndRetry),
+      .init("queue.cancellation", cancellation),
+      .init("queue.cancellationDuringInstall", cancellationDuringInstall),
+      .init("queue.separateDevices", separateDevices),
+      .init("queue.shutdownWhileDownloading", shutdownWhileDownloading),
+      .init("queue.observableBatchLifecycle", observableBatchLifecycle),
+      .init(
+        "queue.refusedInstallationsReleaseReservations", refusedInstallationsReleaseReservations),
+    ]
   }
 
   private static func selectionAndSerialExecution() async throws {

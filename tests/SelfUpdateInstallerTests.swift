@@ -2,14 +2,13 @@ import Foundation
 
 enum SelfUpdateInstallerTests {
   @MainActor
-  static func run() async throws {
-    try await preparation()
-    try await cancellation()
-    try await replacement()
-    try await timeout()
-    print(
-      "PASS: real archive preparation, cancellation cleanup, atomic replacement, rollback, and exit timeout."
-    )
+  static var cases: [TestSuite.Case] {
+    [
+      .init("installer.preparation", preparation),
+      .init("installer.cancellation", cancellation),
+      .init("installer.replacement", replacement),
+      .init("installer.timeout", timeout),
+    ]
   }
 
   @MainActor

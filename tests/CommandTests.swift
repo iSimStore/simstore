@@ -2,22 +2,21 @@ import Foundation
 
 @main
 struct CommandTests {
+  @MainActor
   static func main() async {
-    do {
-      try argumentBytes()
-      try processFailures()
-      try wrapperArguments()
-      try wrapperFailures()
-      try await cancelledBeforeLaunch()
-      try await cancelledAfterLaunch()
-      print(
-        "PASS: command output, literal arguments, exit diagnostics, wrappers, and cancellation boundaries."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Command test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("argumentBytes", argumentBytes),
+      .init("processFailures", processFailures),
+      .init("wrapperArguments", wrapperArguments),
+      .init("wrapperFailures", wrapperFailures),
+      .init("cancelledBeforeLaunch", cancelledBeforeLaunch),
+      .init("cancelledAfterLaunch", cancelledAfterLaunch),
+    ]
   }
 
   static func argumentBytes() throws {

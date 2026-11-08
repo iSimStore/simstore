@@ -1,3 +1,17 @@
+include("${PROJECT_SOURCE_DIR}/cmake/SwiftTestSuites.cmake")
+
+add_executable(SimStoreTestSuiteFixture TestSuiteFixture.swift)
+target_compile_options(SimStoreTestSuiteFixture PRIVATE -parse-as-library)
+add_swift_test_suite(runner-fixture SimStoreTestSuiteFixture TIMEOUT 5 RUN_SERIAL NO_DISCOVERY)
+add_test(NAME test-suite-runner COMMAND "${CMAKE_COMMAND}"
+    "-DEXECUTABLE=$<TARGET_FILE:SimStoreTestSuiteFixture>"
+    "-DINCLUDE_FILE=${CMAKE_CURRENT_BINARY_DIR}/SimStoreTestSuiteFixture_cases.cmake"
+    "-DCTEST_EXECUTABLE=${CMAKE_CTEST_COMMAND}"
+    "-DDISCOVERY_SCRIPT=${PROJECT_SOURCE_DIR}/cmake/DiscoverSwiftTests.cmake"
+    "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/runner-tests"
+    -P "${PROJECT_SOURCE_DIR}/cmake/TestSuiteHarnessTest.cmake")
+set_tests_properties(test-suite-runner PROPERTIES TIMEOUT 30)
+
 add_executable(SimStoreSmokeTest AppSmokeTest.swift)
 add_dependencies(SimStoreSmokeTest SimStore)
 # Parse the single-file @main entry point as a library.
@@ -11,15 +25,13 @@ set_tests_properties(app-window-close PROPERTIES TIMEOUT 10 RUN_SERIAL TRUE)
 
 add_executable(SimStoreCommandTest CommandTests.swift "${PROJECT_SOURCE_DIR}/src/Command.swift")
 target_compile_options(SimStoreCommandTest PRIVATE -parse-as-library)
-add_test(NAME command COMMAND SimStoreCommandTest)
-set_tests_properties(command PROPERTIES TIMEOUT 10)
+add_swift_test_suite(command SimStoreCommandTest TIMEOUT 10)
 
 add_executable(SimStoreCatalogTest AppCatalogTests.swift
     "${PROJECT_SOURCE_DIR}/src/AppCatalog.swift"
 )
 target_compile_options(SimStoreCatalogTest PRIVATE -parse-as-library)
-add_test(NAME catalog COMMAND SimStoreCatalogTest)
-set_tests_properties(catalog PROPERTIES TIMEOUT 10)
+add_swift_test_suite(catalog SimStoreCatalogTest TIMEOUT 10)
 
 add_executable(SimStoreCatalogGridTest CatalogAppGridTests.swift
     "${PROJECT_SOURCE_DIR}/src/CatalogAppGrid.swift"
@@ -59,16 +71,14 @@ add_executable(SimStoreCatalogLoadingTest CatalogLoadingTests.swift
     "${PROJECT_SOURCE_DIR}/src/AppConfiguration.swift"
 )
 target_compile_options(SimStoreCatalogLoadingTest PRIVATE -parse-as-library)
-add_test(NAME catalog-loading COMMAND SimStoreCatalogLoadingTest)
-set_tests_properties(catalog-loading PROPERTIES TIMEOUT 15)
+add_swift_test_suite(catalog-loading SimStoreCatalogLoadingTest TIMEOUT 15)
 
 add_executable(SimStoreIconCacheTest IconCacheTests.swift
     "${PROJECT_SOURCE_DIR}/src/IconCache.swift"
     "${PROJECT_SOURCE_DIR}/src/AppConfiguration.swift"
 )
 target_compile_options(SimStoreIconCacheTest PRIVATE -parse-as-library)
-add_test(NAME icon-cache COMMAND SimStoreIconCacheTest)
-set_tests_properties(icon-cache PROPERTIES TIMEOUT 20)
+add_swift_test_suite(icon-cache SimStoreIconCacheTest TIMEOUT 20)
 
 add_executable(SimStoreInstallationTest AppInstallationTests.swift AppInstallButtonTests.swift AppDownloadTests.swift AppPackageTests.swift AppUpdateBatchTests.swift InstallationFixtures.swift
     "${PROJECT_SOURCE_DIR}/src/AppCatalog.swift"
@@ -100,16 +110,15 @@ add_executable(SimStoreInstallationTest AppInstallationTests.swift AppInstallBut
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
 target_compile_options(SimStoreInstallationTest PRIVATE -parse-as-library)
-add_test(NAME installation COMMAND SimStoreInstallationTest)
-set_tests_properties(installation PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
+add_swift_test_suite(installation SimStoreInstallationTest TIMEOUT 30 RUN_SERIAL)
 
 add_executable(SimStoreDiscoveryTest SimulatorDiscoveryTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorDiscovery.swift"
     "${PROJECT_SOURCE_DIR}/src/SimulatorState.swift"
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
-add_test(NAME simulator-discovery COMMAND SimStoreDiscoveryTest)
-set_tests_properties(simulator-discovery PROPERTIES TIMEOUT 15)
+target_compile_options(SimStoreDiscoveryTest PRIVATE -parse-as-library)
+add_swift_test_suite(simulator-discovery SimStoreDiscoveryTest TIMEOUT 15)
 
 add_executable(SimStoreControlTest SimulatorControlTests.swift
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
@@ -117,8 +126,7 @@ add_executable(SimStoreControlTest SimulatorControlTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorPresenter.swift"
 )
 target_compile_options(SimStoreControlTest PRIVATE -parse-as-library)
-add_test(NAME simulator-control COMMAND SimStoreControlTest)
-set_tests_properties(simulator-control PROPERTIES TIMEOUT 15)
+add_swift_test_suite(simulator-control SimStoreControlTest TIMEOUT 15)
 
 add_executable(SimStoreApplicationsTest SimulatorApplicationsTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorApplications.swift"
@@ -127,8 +135,7 @@ add_executable(SimStoreApplicationsTest SimulatorApplicationsTests.swift
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
 target_compile_options(SimStoreApplicationsTest PRIVATE -parse-as-library)
-add_test(NAME simulator-applications COMMAND SimStoreApplicationsTest)
-set_tests_properties(simulator-applications PROPERTIES TIMEOUT 15)
+add_swift_test_suite(simulator-applications SimStoreApplicationsTest TIMEOUT 15)
 
 add_executable(SimStoreInstalledAppsTest InstalledAppsStoreTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorOperationMonitor.swift"
@@ -140,8 +147,7 @@ add_executable(SimStoreInstalledAppsTest InstalledAppsStoreTests.swift
     "${PROJECT_SOURCE_DIR}/src/AppCatalog.swift"
 )
 target_compile_options(SimStoreInstalledAppsTest PRIVATE -parse-as-library)
-add_test(NAME installed-apps COMMAND SimStoreInstalledAppsTest)
-set_tests_properties(installed-apps PROPERTIES TIMEOUT 15)
+add_swift_test_suite(installed-apps SimStoreInstalledAppsTest TIMEOUT 15)
 
 add_executable(SimStoreOperationMonitorTest SimulatorOperationMonitorTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorOperationMonitor.swift"
@@ -153,8 +159,7 @@ add_executable(SimStoreOperationMonitorTest SimulatorOperationMonitorTests.swift
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
 target_compile_options(SimStoreOperationMonitorTest PRIVATE -parse-as-library)
-add_test(NAME simulator-operation-monitor COMMAND SimStoreOperationMonitorTest)
-set_tests_properties(simulator-operation-monitor PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)
+add_swift_test_suite(simulator-operation-monitor SimStoreOperationMonitorTest TIMEOUT 20 RUN_SERIAL)
 
 add_executable(SimStoreStoreTest SimulatorStoreTests.swift SimulatorShutdownTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorDiscovery.swift"
@@ -164,8 +169,7 @@ add_executable(SimStoreStoreTest SimulatorStoreTests.swift SimulatorShutdownTest
     "${PROJECT_SOURCE_DIR}/src/Command.swift"
 )
 target_compile_options(SimStoreStoreTest PRIVATE -parse-as-library)
-add_test(NAME simulator-store COMMAND SimStoreStoreTest)
-set_tests_properties(simulator-store PROPERTIES TIMEOUT 15)
+add_swift_test_suite(simulator-store SimStoreStoreTest TIMEOUT 15)
 
 add_executable(SimStoreLocalizationTest LocalizationTests.swift)
 add_dependencies(SimStoreLocalizationTest SimStore)
@@ -211,8 +215,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     )
     target_compile_definitions(SimStorePreviewScenarioTest PRIVATE DEBUG)
     target_compile_options(SimStorePreviewScenarioTest PRIVATE -parse-as-library)
-    add_test(NAME preview-scenarios COMMAND SimStorePreviewScenarioTest)
-    set_tests_properties(preview-scenarios PROPERTIES TIMEOUT 15)
+    add_swift_test_suite(preview-scenarios SimStorePreviewScenarioTest TIMEOUT 15)
 endif()
 
 execute_process(COMMAND xcrun --sdk "${CMAKE_OSX_SYSROOT}" --show-sdk-version
@@ -264,8 +267,7 @@ add_executable(SimStoreSelfUpdateTest
     "${PROJECT_SOURCE_DIR}/src/StableSizeView.swift"
 )
 target_compile_options(SimStoreSelfUpdateTest PRIVATE -parse-as-library)
-add_test(NAME self-update COMMAND SimStoreSelfUpdateTest)
-set_tests_properties(self-update PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+add_swift_test_suite(self-update SimStoreSelfUpdateTest TIMEOUT 60 RUN_SERIAL)
 
 add_executable(SimStoreSelfUpdateIntegrationTest
     SelfUpdateIntegrationTest.swift SelfUpdateFixtures.swift
@@ -298,5 +300,4 @@ add_executable(SimStoreSelfUninstallTest SelfUninstallTests.swift
 )
 add_dependencies(SimStoreSelfUninstallTest SimStore)
 target_compile_options(SimStoreSelfUninstallTest PRIVATE -parse-as-library)
-add_test(NAME self-uninstall COMMAND SimStoreSelfUninstallTest "$<TARGET_BUNDLE_DIR:SimStore>")
-set_tests_properties(self-uninstall PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+add_swift_test_suite(self-uninstall SimStoreSelfUninstallTest TIMEOUT 60 RUN_SERIAL ARGS "$<TARGET_BUNDLE_DIR:SimStore>")

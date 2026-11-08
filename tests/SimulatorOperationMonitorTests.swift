@@ -4,21 +4,21 @@ import SwiftUI
 @main
 @MainActor
 struct SimulatorOperationMonitorTests {
+  @MainActor
   static func main() async {
-    do {
-      try await finishedAndReplacedOperations()
-      try await keepWaitingAndSeparateDevices()
-      try await powerStateChanges()
-      try await failedScanBeforeTimeout()
-      try await nativeAlertActions()
-      try await shutdownAfterDiscoveryFailure()
-      print(
-        "PASS: stalled operations, recovery prompts, waiting, completion, and exact shutdown targets."
-      )
-    } catch {
-      FileHandle.standardError.write(Data("Operation monitor test failed: \(error)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("finishedAndReplacedOperations", finishedAndReplacedOperations),
+      .init("keepWaitingAndSeparateDevices", keepWaitingAndSeparateDevices),
+      .init("powerStateChanges", powerStateChanges),
+      .init("failedScanBeforeTimeout", failedScanBeforeTimeout),
+      .init("nativeAlertActions", nativeAlertActions),
+      .init("shutdownAfterDiscoveryFailure", shutdownAfterDiscoveryFailure),
+    ]
   }
 
   private static func device(_ id: String, state: SimulatorState = .booted) -> SimulatorDevice {

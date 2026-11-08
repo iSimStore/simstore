@@ -3,23 +3,22 @@ import Foundation
 @main
 @MainActor
 struct CatalogLoadingTests {
+  @MainActor
   static func main() async {
-    do {
-      try releaseURLs()
-      try await firstDownloadAndCache()
-      try await cachedFallbackAndRecovery()
-      try await invalidDownloadsPreserveCache()
-      try await corruptCacheAndUnwritableCache()
-      try await refreshCoalescingAndCancellation()
-      try await joiningRefreshAfterCancellation()
-      print(
-        "PASS: catalog download, cache-first loading, offline recovery, validation, and cancellation."
-      )
-    } catch {
-      FileHandle.standardError.write(
-        Data("Catalog loading test failed: \(error.localizedDescription)\n".utf8))
-      exit(EXIT_FAILURE)
-    }
+    await TestSuite.run(cases)
+  }
+
+  @MainActor
+  static var cases: [TestSuite.Case] {
+    [
+      .init("releaseURLs", releaseURLs),
+      .init("firstDownloadAndCache", firstDownloadAndCache),
+      .init("cachedFallbackAndRecovery", cachedFallbackAndRecovery),
+      .init("invalidDownloadsPreserveCache", invalidDownloadsPreserveCache),
+      .init("corruptCacheAndUnwritableCache", corruptCacheAndUnwritableCache),
+      .init("refreshCoalescingAndCancellation", refreshCoalescingAndCancellation),
+      .init("joiningRefreshAfterCancellation", joiningRefreshAfterCancellation),
+    ]
   }
 
   static func releaseURLs() throws {
