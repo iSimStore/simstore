@@ -84,7 +84,7 @@ private final class AppDownloadTransfer: NSObject, URLSessionDownloadDelegate, @
   private let destination: URL
   private let progress: AppDownload.Progress
   private let lock = NSLock()
-  private var task: URLSessionDownloadTask?
+  private var session: URLSession?
   private var continuation: CheckedContinuation<Void, Error>?
   private var result: Result<Void, Error>?
   private var canceled = false
@@ -106,17 +106,19 @@ private final class AppDownloadTransfer: NSObject, URLSessionDownloadDelegate, @
       configuration.timeoutIntervalForRequest = 60
       configuration.timeoutIntervalForResource = 3600
       let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+      self.session = session
       let task = session.downloadTask(with: request)
-      self.task = task
       task.resume()
     }
   }
 
   func cancel() {
-    lock.withLock {
+    let session = lock.withLock { () -> URLSession? in
+      guard !canceled else { return nil }
       canceled = true
-      task?.cancel()
+      return self.session
     }
+    session?.invalidateAndCancel()
   }
 
   func urlSession(
@@ -147,15 +149,18 @@ private final class AppDownloadTransfer: NSObject, URLSessionDownloadDelegate, @
   ) {
     let completion = lock.withLock {
       let continuation = continuation
+      let session = canceled ? nil : self.session
       self.continuation = nil
-      self.task = nil
+      self.session = nil
       let result: Result<Void, Error> =
         if canceled { .failure(CancellationError()) } else if let error { .failure(error) } else {
           self.result ?? .failure(AppDownload.Failure.invalidResponse)
         }
-      return (continuation, result)
+      self.result = nil
+      return (continuation: continuation, result: result, session: session)
     }
-    session.finishTasksAndInvalidate()
-    completion.0?.resume(with: completion.1)
+    // Cancellation invalidates the session; other outcomes close it here.
+    completion.session?.finishTasksAndInvalidate()
+    completion.continuation?.resume(with: completion.result)
   }
 }

@@ -52,6 +52,8 @@ Corrupt disk images are removed and fetched again. Failed requests and invalid r
 
 App archives are streamed to a separate, randomly named directory under `URL.temporaryDirectory` for each installation. The download session has its HTTP cache disabled, a 60-second inactivity timeout, and a one-hour resource timeout. Archives are not retained or shared as a persistent download cache; retrying an installation starts a new download.
 
+Each transfer explicitly retains its session until the native completion callback. Cancellation invalidates the session and cancels its download; other outcomes finish and invalidate the session on completion. The callback clears the retained session, continuation, and stored result before resuming the caller, so cleanup still waits for native completion. Cancellation before startup creates no session.
+
 App installation and self-update coalesce download progress before delivering it to the main actor. Each download has one consumer, buffers only the latest pending byte count, and delivers updates at least 100 ms apart. A successful download delivers its final byte count before verification begins. Failure and cancellation stop the consumer and discard pending updates before the download step returns, so late callbacks cannot overwrite later phases.
 
 The archive's size and SHA-256 must match the selected catalog version before extraction. The temporary archive and extracted app are removed when the operation succeeds, fails, or finishes canceling. Cancellation during preparation waits for any running archive command to finish before cleanup; once `simctl install` starts, it is allowed to finish. A process exit can leave temporary files for the operating system to reclaim.
