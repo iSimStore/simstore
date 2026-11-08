@@ -88,10 +88,27 @@ struct SidebarSelectionTests {
             "Selecting visible row \(index) must preserve scrolling: \(offset) -> \(table.visibleRect.origin)."
           )
         }
+        guard
+          let other = devices.indices.first(where: {
+            table.visibleRect.contains(table.rect(ofRow: $0)) && $0 != index
+          })
+        else { throw failure("Expected another visible simulator for menu selection.") }
+        state.selectedDeviceID = devices[other].id
+        try await settle(host)
+        guard table.selectedRow == other, table.visibleRect.origin == offset else {
+          throw failure("Menu selection of a visible simulator must preserve scrolling.")
+        }
       }
 
       state.selectedDeviceID = devices[selected].id
       try await settle(host)
+      try requireVisible(selected, in: table)
+      for index in [devices.count - 1, 0, selected] {
+        state.selectedDeviceID = devices[index].id
+        try await settle(host)
+        try requireVisible(index, in: table)
+      }
+
       scroll.contentView.scroll(to: .zero)
       scroll.reflectScrolledClipView(scroll.contentView)
       let offset = table.visibleRect.origin
@@ -101,6 +118,14 @@ struct SidebarSelectionTests {
         throw failure("Refreshing the same selection must preserve manual scrolling.")
       }
 
+      state.discovery = discovery([])
+      try await settle(host)
+      state.discovery = discovery(devices)
+      try await settle(host)
+      guard let repopulated = tables(in: host).first(where: { $0.numberOfRows == devices.count })
+      else { throw failure("Expected the simulator list after repopulation.") }
+      try requireVisible(selected, in: repopulated)
+
       // A recreated sidebar must also reveal a selection that predates its appearance.
       let recreated = NSHostingView(rootView: SidebarHarness(state: state))
       window.contentView = recreated
@@ -109,7 +134,7 @@ struct SidebarSelectionTests {
       else { throw failure("Expected the recreated simulator list.") }
       try requireVisible(selected, in: restored)
       print(
-        "PASS: delayed initial selection, native row selection without scrolling, sidebar recreation, and refresh scroll preservation."
+        "PASS: initial and offscreen selection, visible row selection without scrolling, list repopulation, sidebar recreation, and refresh scroll preservation."
       )
     } catch {
       FileHandle.standardError.write(
@@ -135,7 +160,9 @@ struct SidebarSelectionTests {
 
   private static func requireVisible(_ index: Int, in table: NSTableView) throws {
     guard table.selectedRow == index, table.visibleRect.contains(table.rect(ofRow: index)) else {
-      throw failure("Selected row \(index) must be fully visible: \(table.visibleRect).")
+      throw failure(
+        "Expected selected row \(index), got \(table.selectedRow); row=\(table.rect(ofRow: index)), visible=\(table.visibleRect)."
+      )
     }
   }
 

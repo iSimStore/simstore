@@ -12,9 +12,8 @@ struct SidebarView: View {
   let selectDevice: (String) -> Void
   let openRepository: () -> Void
 
-  @State private var hasRevealedInitialSelection = false
-
   private static let sectionRowHeight: CGFloat = 44
+  private static let simulatorRowVerticalInset: CGFloat = 10
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -70,7 +69,14 @@ struct SidebarView: View {
               }
               .tag(device.id)
               .id(device.id)
-              .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+              .listRowInsets(
+                EdgeInsets(
+                  top: Self.simulatorRowVerticalInset, leading: 12,
+                  bottom: Self.simulatorRowVerticalInset, trailing: 12)
+              )
+              .anchorPreference(key: SimulatorRowBounds.self, value: .bounds) {
+                [device.id: $0]
+              }
               .accessibilityElement(children: .combine)
               .help(Text(verbatim: device.id))
             }
@@ -79,13 +85,24 @@ struct SidebarView: View {
           .scrollContentBackground(.hidden)
           .accessibilityLabel(simulatorListTitle)
           .frame(minHeight: 0)
-          .task(id: selectedDeviceID) {
-            guard !hasRevealedInitialSelection, let id = selectedDeviceID else { return }
-            // The native list needs its first layout before it can reveal a row.
-            await Task.yield()
-            guard !Task.isCancelled else { return }
-            proxy.scrollTo(id, anchor: .center)
-            hasRevealedInitialSelection = true
+          .overlayPreferenceValue(SimulatorRowBounds.self) { bounds in
+            GeometryReader { geometry in
+              Color.clear
+                .task(id: selectedDeviceID) {
+                  guard let id = selectedDeviceID else { return }
+                  // The native list needs its first layout before it can reveal a row.
+                  await Task.yield()
+                  guard !Task.isCancelled else { return }
+                  let viewport = CGRect(origin: .zero, size: geometry.size)
+                  if let anchor = bounds[id] {
+                    // Anchors cover row content; include its vertical list insets.
+                    let row = geometry[anchor].insetBy(dx: 0, dy: -Self.simulatorRowVerticalInset)
+                    if viewport.contains(row) { return }
+                  }
+                  proxy.scrollTo(id, anchor: .center)
+                }
+            }
+            .allowsHitTesting(false)
           }
         }
       } else {
@@ -180,5 +197,15 @@ struct SidebarView: View {
   private var visibleUpdateCount: Int? {
     guard let updateCount, updateCount > 0 else { return nil }
     return updateCount
+  }
+}
+
+private struct SimulatorRowBounds: PreferenceKey {
+  static let defaultValue: [String: Anchor<CGRect>] = [:]
+
+  static func reduce(
+    value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]
+  ) {
+    value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
   }
 }
