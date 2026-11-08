@@ -98,6 +98,10 @@ struct SidebarView: View {
                     // Anchors cover row content; include its vertical list insets.
                     let row = geometry[anchor].insetBy(dx: 0, dy: -Self.simulatorRowVerticalInset)
                     if viewport.contains(row) { return }
+                    if viewport.intersects(row) {
+                      proxy.scrollTo(id)
+                      return
+                    }
                   }
                   proxy.scrollTo(id, anchor: .center)
                 }

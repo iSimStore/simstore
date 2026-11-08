@@ -109,6 +109,32 @@ struct SidebarSelectionTests {
         try requireVisible(index, in: table)
       }
 
+      for clipsTop in [true, false] {
+        state.selectedDeviceID = devices[0].id
+        try await settle(host)
+        let row = table.rect(ofRow: selected)
+        let origin = clipsTop ? row.midY : row.midY - table.visibleRect.height
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: origin))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try await settle(host)
+        let viewport = table.visibleRect
+        let visibleHeight = viewport.intersection(row).height
+        guard visibleHeight > 0, visibleHeight < row.height else {
+          throw failure("Expected a partially clipped simulator row.")
+        }
+        let expected = clipsTop ? row.minY : row.maxY - viewport.height
+        table.selectRowIndexes(IndexSet(integer: selected), byExtendingSelection: false)
+        try await settle(host)
+        try requireVisible(selected, in: table)
+        guard state.selectedDeviceID == devices[selected].id,
+          abs(table.visibleRect.minY - expected) <= 1
+        else {
+          throw failure(
+            "Reveal a clipped row with minimum scrolling: expected \(expected), got \(table.visibleRect.minY)."
+          )
+        }
+      }
+
       scroll.contentView.scroll(to: .zero)
       scroll.reflectScrolledClipView(scroll.contentView)
       let offset = table.visibleRect.origin
@@ -134,7 +160,7 @@ struct SidebarSelectionTests {
       else { throw failure("Expected the recreated simulator list.") }
       try requireVisible(selected, in: restored)
       print(
-        "PASS: initial and offscreen selection, visible row selection without scrolling, list repopulation, sidebar recreation, and refresh scroll preservation."
+        "PASS: initial and offscreen selection, visible row selection without scrolling, minimum scrolling for clipped rows, list repopulation, sidebar recreation, and refresh scroll preservation."
       )
     } catch {
       FileHandle.standardError.write(
