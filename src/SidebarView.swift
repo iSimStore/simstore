@@ -12,6 +12,8 @@ struct SidebarView: View {
   let selectDevice: (String) -> Void
   let openRepository: () -> Void
 
+  @State private var hasRevealedInitialSelection = false
+
   private static let sectionRowHeight: CGFloat = 44
 
   var body: some View {
@@ -78,11 +80,12 @@ struct SidebarView: View {
           .accessibilityLabel(simulatorListTitle)
           .frame(minHeight: 0)
           .task(id: selectedDeviceID) {
-            guard let id = selectedDeviceID else { return }
+            guard !hasRevealedInitialSelection, let id = selectedDeviceID else { return }
             // The native list needs its first layout before it can reveal a row.
             await Task.yield()
             guard !Task.isCancelled else { return }
             proxy.scrollTo(id, anchor: .center)
+            hasRevealedInitialSelection = true
           }
         }
       } else {

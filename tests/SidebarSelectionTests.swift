@@ -56,6 +56,7 @@ struct SidebarSelectionTests {
       defer { window.close() }
       try await Task.sleep(for: .milliseconds(100))
       state.discovery = discovery(devices)
+      try await settle(host)
       state.selectedDeviceID = devices[selected].id
       try await settle(host)
       guard let table = tables(in: host).first(where: { $0.numberOfRows == devices.count }),
@@ -66,12 +67,31 @@ struct SidebarSelectionTests {
         "Selected \(devices[selected].name): row=\(table.rect(ofRow: selected)), visible=\(table.visibleRect)"
       )
 
-      for index in [devices.count - 1, 0, selected] {
-        state.selectedDeviceID = devices[index].id
+      for firstRow in [0, max(0, selected - 2)] {
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: table.rect(ofRow: firstRow).minY))
+        scroll.reflectScrolledClipView(scroll.contentView)
         try await settle(host)
-        try requireVisible(index, in: table)
+        guard
+          let index = devices.indices.last(where: {
+            table.visibleRect.contains(table.rect(ofRow: $0))
+              && devices[$0].id != state.selectedDeviceID
+          })
+        else { throw failure("Expected another fully visible simulator row.") }
+        let offset = table.visibleRect.origin
+        table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        try await settle(host)
+        guard state.selectedDeviceID == devices[index].id else {
+          throw failure("Selecting a native row must update the selected simulator.")
+        }
+        guard table.visibleRect.origin == offset else {
+          throw failure(
+            "Selecting visible row \(index) must preserve scrolling: \(offset) -> \(table.visibleRect.origin)."
+          )
+        }
       }
 
+      state.selectedDeviceID = devices[selected].id
+      try await settle(host)
       scroll.contentView.scroll(to: .zero)
       scroll.reflectScrolledClipView(scroll.contentView)
       let offset = table.visibleRect.origin
@@ -89,7 +109,7 @@ struct SidebarSelectionTests {
       else { throw failure("Expected the recreated simulator list.") }
       try requireVisible(selected, in: restored)
       print(
-        "PASS: initial selection, programmatic selection, sidebar recreation, and manual scroll preservation."
+        "PASS: delayed initial selection, native row selection without scrolling, sidebar recreation, and refresh scroll preservation."
       )
     } catch {
       FileHandle.standardError.write(
