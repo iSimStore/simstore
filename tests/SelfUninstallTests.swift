@@ -268,17 +268,23 @@ struct SelfUninstallTests {
       try await Task.sleep(for: .milliseconds(200))
       let preferences = plan.library.appending(path: "Preferences/\(identifier).plist")
       let existedBeforeVerification = exists(preferences)
-      CFPreferencesSynchronize(
-        identifier as CFString, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
-      try require(
-        CFPreferencesCopyAppValue("marker" as CFString, identifier as CFString) == nil,
-        "Remove preferences from the daemon as well as the plist file.")
+      for host in [kCFPreferencesAnyHost, kCFPreferencesCurrentHost] {
+        CFPreferencesSynchronize(identifier as CFString, kCFPreferencesCurrentUser, host)
+        let keys =
+          CFPreferencesCopyKeyList(identifier as CFString, kCFPreferencesCurrentUser, host)
+          as? [String] ?? []
+        try require(
+          keys.isEmpty,
+          "Remove all preferences from the daemon; remaining keys: \(keys.sorted()).")
+      }
       if exists(preferences) {
         let contents =
           try PropertyListSerialization.propertyList(
             from: Data(contentsOf: preferences), format: nil) as? [String: Any]
-        throw failure(
-          "Do not recreate the preference file after the app exits. Present before verification: \(existedBeforeVerification); remaining keys: \(contents?.keys.sorted().description ?? "invalid dictionary")."
+        // macOS may persist an empty domain after its preference values have been removed.
+        try require(
+          contents?.isEmpty == true,
+          "Do not restore preference data after the app exits. Present before verification: \(existedBeforeVerification); remaining keys: \(contents?.keys.sorted().description ?? "invalid dictionary")."
         )
       }
     }
