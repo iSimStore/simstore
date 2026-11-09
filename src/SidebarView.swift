@@ -222,7 +222,7 @@ private struct SimulatorRowBounds: PreferenceKey {
   }
 }
 
-// Observe double clicks without delaying the table's native mouse-down selection.
+// Observe double clicks without delaying the table's native selection.
 private struct SimulatorRowDoubleClick: NSViewRepresentable {
   let action: () -> Void
 

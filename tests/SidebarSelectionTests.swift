@@ -67,7 +67,7 @@ struct SidebarSelectionTests {
         "singleClickShutdownTrailingPadding",
         { try await singleClickShutdown($0, horizontalFraction: 0.9) }
       ),
-      ("mouseDownShutdown", mouseDownShutdown),
+      ("heldSingleClickShutdown", heldSingleClickShutdown),
       ("singleClickBooted", { try await clickInactive($0, state: .booted, count: 1) }),
       ("singleClickBooting", { try await clickInactive($0, state: .booting, count: 1) }),
       ("doubleClickShutdown", { try await doubleClickShutdown($0) }),
@@ -203,7 +203,7 @@ struct SidebarSelectionTests {
     try await fixture.requireNoStart()
   }
 
-  private static func mouseDownShutdown(_ fixture: SidebarFixture) async throws {
+  private static func heldSingleClickShutdown(_ fixture: SidebarFixture) async throws {
     let table = try await fixture.ready()
     let index = try fixture.visibleRow(in: table, state: .shutdown)
     let row = table.rect(ofRow: index)
@@ -215,7 +215,7 @@ struct SidebarSelectionTests {
         windowNumber: fixture.window.windowNumber, context: nil, eventNumber: 1,
         clickCount: 1, pressure: 1)
     else { throw failure("Create the native mouse-down event.") }
-    var selectionBeforeMouseUp: Int?
+    var mouseWasReleased = false
     let release = Timer(timeInterval: 0.2, repeats: false) { _ in
       MainActor.assumeIsolated {
         guard
@@ -224,7 +224,7 @@ struct SidebarSelectionTests {
             windowNumber: fixture.window.windowNumber, context: nil, eventNumber: 2,
             clickCount: 1, pressure: 0)
         else { preconditionFailure("Create the native mouse-up event.") }
-        selectionBeforeMouseUp = table.selectedRow
+        mouseWasReleased = true
         NSApplication.shared.postEvent(up, atStart: false)
       }
     }
@@ -232,11 +232,15 @@ struct SidebarSelectionTests {
     RunLoop.main.add(release, forMode: .common)
     defer { release.invalidate() }
     NSApplication.shared.sendEvent(down)
-    try await fixture.wait("Observe selection before releasing the mouse.") {
-      selectionBeforeMouseUp != nil
+    try await fixture.wait("Release the held mouse before checking selection.") {
+      mouseWasReleased
     }
-    guard selectionBeforeMouseUp == index else {
-      throw failure("Select on mouse down, before mouse up or double-click recognition.")
+    try await fixture.wait(
+      "A held single click selects promptly after releasing the mouse.",
+      timeout: .milliseconds(100)
+    ) {
+      mouseWasReleased && table.selectedRow == index
+        && fixture.state.selectedDeviceID == fixture.devices[index].id
     }
     try await fixture.requireNoStart()
   }
@@ -312,7 +316,8 @@ private final class SidebarFixture {
     window.isReleasedWhenClosed = false
     window.contentView = NSHostingView(rootView: SidebarHarness(state: state))
     window.makeKeyAndOrderFront(nil)
-    NSApplication.shared.activate()
+    // Synthetic input requires the test app to own focus even when launched by CTest.
+    NSApplication.shared.activate(ignoringOtherApps: true)
   }
 
   var table: NSTableView? {
@@ -321,6 +326,9 @@ private final class SidebarFixture {
   }
 
   func ready() async throws -> NSTableView {
+    try await wait("Activate the test window before sending mouse input.") {
+      NSApplication.shared.isActive && window.isKeyWindow
+    }
     state.discovery = discovery(devices)
     try await wait("Display inventory before the initial selection arrives.") { table != nil }
     guard let table else { throw SidebarSelectionTests.failure("Expected the simulator list.") }

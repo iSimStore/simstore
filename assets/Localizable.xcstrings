@@ -1409,6 +1409,22 @@
         }
       }
     },
+    "Music": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Music"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音乐"
+          }
+        }
+      }
+    },
     "Newer compatible versions of your installed apps will appear here.": {
       "localizations": {
         "en": {
