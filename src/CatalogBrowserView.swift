@@ -248,6 +248,7 @@ struct CatalogBrowserView: View {
         focusedAppID: focus,
         showDetails: { selectedApp = app })
     }
+    .id(section)
   }
 
   private func refreshInstalledApps() { Task { await installedApps.refresh(for: device) } }
