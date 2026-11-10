@@ -271,7 +271,7 @@ private struct CatalogSearchField: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
 
   func makeNSView(context: Context) -> NSSearchField {
-    let field = NSSearchField()
+    let field = SearchField()
     field.placeholderString = String(localized: "Search apps")
     field.sendsWholeSearchString = false
     field.sendsSearchStringImmediately = true
@@ -285,6 +285,18 @@ private struct CatalogSearchField: NSViewRepresentable {
   func updateNSView(_ field: NSSearchField, context: Context) {
     context.coordinator.text = $text
     if field.stringValue != text { field.stringValue = text }
+  }
+
+  private final class SearchField: NSSearchField {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+      let modifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+      guard event.modifierFlags.intersection(modifiers) == .command,
+        event.charactersIgnoringModifiers?.lowercased() == "f",
+        window?.makeFirstResponder(self) == true
+      else { return super.performKeyEquivalent(with: event) }
+      selectText(nil)
+      return true
+    }
   }
 
   @MainActor
