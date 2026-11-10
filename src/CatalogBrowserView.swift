@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @MainActor
@@ -126,13 +127,10 @@ struct CatalogBrowserView: View {
     HStack(alignment: .top, spacing: 20) {
       LibraryHeading(section: section)
       Spacer(minLength: 0)
-      TextField(text: $query) {
-        Text("Search apps")
-      }
-      .textFieldStyle(.roundedBorder)
-      .accessibilityIdentifier("catalog-search")
-      .frame(width: 180)
-      .padding(.top, 5)
+      CatalogSearchField(text: $query)
+        .frame(width: 180)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 5)
     }
   }
 
@@ -263,5 +261,40 @@ struct CatalogBrowserView: View {
     installedApps.clearRecentInstallations()
     Task { await store.refresh() }
     refreshInstalledApps()
+  }
+}
+
+@MainActor
+private struct CatalogSearchField: NSViewRepresentable {
+  @Binding var text: String
+
+  func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+  func makeNSView(context: Context) -> NSSearchField {
+    let field = NSSearchField()
+    field.placeholderString = String(localized: "Search apps")
+    field.sendsWholeSearchString = false
+    field.sendsSearchStringImmediately = true
+    field.maximumRecents = 0
+    field.target = context.coordinator
+    field.action = #selector(Coordinator.searchChanged(_:))
+    field.setAccessibilityIdentifier("catalog-search")
+    return field
+  }
+
+  func updateNSView(_ field: NSSearchField, context: Context) {
+    context.coordinator.text = $text
+    if field.stringValue != text { field.stringValue = text }
+  }
+
+  @MainActor
+  final class Coordinator: NSObject {
+    var text: Binding<String>
+
+    init(text: Binding<String>) { self.text = text }
+
+    @objc func searchChanged(_ field: NSSearchField) {
+      text.wrappedValue = field.stringValue
+    }
   }
 }

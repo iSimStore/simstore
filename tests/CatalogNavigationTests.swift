@@ -39,8 +39,7 @@ struct CatalogNavigationTests {
       let query = "Keep this search"
       let field = search(in: host)!
       field.stringValue = query
-      field.delegate?.controlTextDidChange?(
-        Notification(name: NSControl.textDidChangeNotification, object: field))
+      field.sendAction(field.action, to: field.target)
       probe.pendingDownload?.resume()
       probe.pendingDownload = nil
       try await eventually {
@@ -50,10 +49,27 @@ struct CatalogNavigationTests {
       }
       guard let sections = views(NSTableView.self, in: host).first(where: { $0.numberOfRows == 3 })
       else { throw failure("Expected the native library navigation list.") }
-      choose("Utilities", in: category(in: host)!)
-      try await eventually { category(in: host)?.titleOfSelectedItem == "Utilities" }
       let initialDownloads = probe.catalogCalls
       let initialQueries = probe.inventoryCalls
+      guard let searchField = field as? NSSearchField,
+        let cell = searchField.cell as? NSSearchFieldCell,
+        let clear = cell.cancelButtonCell
+      else { throw failure("Expected a native search field with a clear button.") }
+      searchField.stringValue = "No catalog app matches this search"
+      searchField.sendAction(searchField.action, to: searchField.target)
+      try await eventually { catalogScroll(in: host) == nil }
+      try require(
+        !searchField.cancelButtonBounds.isEmpty
+          && searchField.bounds.contains(searchField.cancelButtonBounds),
+        "Keep the clear button visible within the search field.")
+      clear.performClick(searchField)
+      try await eventually { searchField.stringValue.isEmpty && catalogScroll(in: host) != nil }
+      try await checkNoRefresh(
+        probe, downloads: initialDownloads, queries: initialQueries, in: host)
+      searchField.stringValue = query
+      searchField.sendAction(searchField.action, to: searchField.target)
+      choose("Utilities", in: category(in: host)!)
+      try await eventually { category(in: host)?.titleOfSelectedItem == "Utilities" }
       for index in [1, 2, 0, 2, 1, 0] {
         try await eventually { catalogScroll(in: host) != nil }
         guard let scroll = catalogScroll(in: host), let document = scroll.documentView else {
@@ -148,7 +164,7 @@ struct CatalogNavigationTests {
         probe.catalogCalls == initialDownloads && search(in: host)?.stringValue == query,
         "Discovery failure and recovery must keep the browser, filters, and catalog alive.")
       print(
-        "PASS: section changes reset scrolling and preserve filters and data; device and activation refreshes still work."
+        "PASS: search clearing restores results; section changes reset scrolling and preserve filters and data; device and activation refreshes still work."
       )
     } catch {
       FileHandle.standardError.write(
