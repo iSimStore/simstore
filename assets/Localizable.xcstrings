@@ -1297,6 +1297,22 @@
         }
       }
     },
+    "Lifestyle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lifestyle"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生活方式"
+          }
+        }
+      }
+    },
     "Loading Apps…": {
       "localizations": {
         "en": {
