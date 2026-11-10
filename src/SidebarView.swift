@@ -68,14 +68,13 @@ struct SidebarView: View {
                   .foregroundStyle(.secondary)
                   .frame(width: 20)
               }
-              .contentShape(Rectangle())
-              .simultaneousGesture(
-                TapGesture(count: 2).onEnded {
+              .background {
+                SimulatorRowDoubleClick {
+                  guard device.state == .shutdown else { return }
                   selectDevice(device.id)
                   startDevice(device.id)
-                },
-                including: device.state == .shutdown ? .all : .none
-              )
+                }
+              }
               .tag(device.id)
               .id(device.id)
               .listRowInsets(
@@ -220,5 +219,89 @@ private struct SimulatorRowBounds: PreferenceKey {
     value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]
   ) {
     value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+  }
+}
+
+// Observe double clicks without delaying the table's native selection.
+private struct SimulatorRowDoubleClick: NSViewRepresentable {
+  let action: () -> Void
+
+  func makeNSView(context: Context) -> AnchorView { AnchorView() }
+
+  func updateNSView(_ view: AnchorView, context: Context) {
+    view.action = action
+  }
+
+  static func dismantleNSView(_ view: AnchorView, coordinator: ()) {
+    view.detach()
+  }
+
+  final class AnchorView: NSView, NSGestureRecognizerDelegate {
+    var action: (() -> Void)?
+
+    private lazy var doubleClick: DoubleClickRecognizer = {
+      let recognizer = DoubleClickRecognizer(target: self, action: #selector(performAction))
+      recognizer.delaysPrimaryMouseButtonEvents = false
+      recognizer.delegate = self
+      return recognizer
+    }()
+
+    override func viewDidMoveToSuperview() {
+      super.viewDidMoveToSuperview()
+      attach()
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      attach()
+    }
+
+    override func layout() {
+      super.layout()
+      attach()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func detach() {
+      doubleClick.view?.removeGestureRecognizer(doubleClick)
+    }
+
+    private func attach() {
+      var ancestor = superview
+      while let view = ancestor {
+        if let table = view as? NSTableView {
+          if doubleClick.view !== table {
+            detach()
+            table.addGestureRecognizer(doubleClick)
+          }
+          return
+        }
+        ancestor = view.superview
+      }
+      detach()
+    }
+
+    func gestureRecognizer(
+      _ gestureRecognizer: NSGestureRecognizer, shouldAttemptToRecognizeWith event: NSEvent
+    ) -> Bool {
+      guard let table = doubleClick.view as? NSTableView else { return false }
+      let row = table.row(for: self)
+      return row >= 0 && row == table.row(at: table.convert(event.locationInWindow, from: nil))
+    }
+
+    func gestureRecognizer(
+      _ gestureRecognizer: NSGestureRecognizer,
+      shouldRecognizeSimultaneouslyWith otherGestureRecognizer: NSGestureRecognizer
+    ) -> Bool { true }
+
+    @objc private func performAction() { action?() }
+  }
+
+  private final class DoubleClickRecognizer: NSGestureRecognizer {
+    override func mouseDown(with event: NSEvent) {
+      super.mouseDown(with: event)
+      state = event.clickCount == 2 ? .recognized : .failed
+    }
   }
 }

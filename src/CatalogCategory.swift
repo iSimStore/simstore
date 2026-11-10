@@ -1,7 +1,8 @@
 import Foundation
 
 enum CatalogCategory: String {
-  case browser, cloud, communication, email, games, health, maps, media, productivity, reading,
+  case browser, cloud, communication, email, games, health, maps, media, music, productivity,
+    reading,
     security, social, utilities
 
   var title: String {
@@ -14,6 +15,7 @@ enum CatalogCategory: String {
     case .health: String(localized: "Health")
     case .maps: String(localized: "Maps")
     case .media: String(localized: "Media")
+    case .music: String(localized: "Music")
     case .productivity: String(localized: "Productivity")
     case .reading: String(localized: "Reading")
     case .security: String(localized: "Security")

@@ -54,6 +54,7 @@ struct LocalizationTests {
         ("Refresh Catalog", "Refresh Catalog", "刷新目录"),
         ("Cloud", "Cloud", "云服务"),
         ("Email", "Email", "电子邮件"),
+        ("Music", "Music", "音乐"),
         ("Security", "Security", "安全"),
         ("Catalog Unavailable", "Catalog Unavailable", "无法获取应用目录"),
         ("License", "License", "许可证"),
