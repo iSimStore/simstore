@@ -5,10 +5,17 @@ import SwiftUI
 @main
 @MainActor
 struct CatalogNavigationTests {
-  static func main() async {
+  static func main() {
+    NSApplication.shared.setActivationPolicy(.regular)
+    Task { @MainActor in
+      await verifyNavigation()
+      exit(EXIT_SUCCESS)
+    }
+    NSApplication.shared.run()
+  }
+
+  private static func verifyNavigation() async {
     do {
-      NSApplication.shared.setActivationPolicy(.regular)
-      NSApplication.shared.finishLaunching()
       // Register an accessibility client so SwiftUI builds its virtual accessibility elements.
       _ = await Task.detached {
         var role: CFTypeRef?
