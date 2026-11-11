@@ -30,23 +30,34 @@ struct CatalogNavigationTests {
         url: URL(string: "https://example.com/index.json")!,
         cacheURL: directory.appending(component: "index.json"),
         transport: { try await probe.fetch($0) })
+      let window = NSWindow(
+        contentRect: NSRect(x: 200, y: 200, width: 1180, height: 780),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      window.makeKeyAndOrderFront(nil)
+      NSApplication.shared.activate(ignoringOtherApps: true)
+      defer { window.close() }
+      try await eventually { window.isKeyWindow && NSApplication.shared.isActive }
       let host = NSHostingView(
         rootView: ContentView(
           discover: { try probe.scan() }, boot: { _ in throw failure("Unexpected boot") },
           shutdown: { _ in throw failure("Unexpected shutdown") }, catalogClient: client,
           loadInstalledApps: { await probe.installed(on: $0) }))
-      let window = NSWindow(
-        contentRect: NSRect(x: 200, y: 200, width: 1180, height: 780),
-        styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.isReleasedWhenClosed = false
       window.contentView = host
-      window.orderFront(nil)
-      defer { window.close() }
       try await eventually { probe.pendingDownload != nil && search(in: host) != nil }
       let query = "Keep this search"
       let field = search(in: host)!
+      window.makeFirstResponder(nil)
+      try await focusSearchUsingKeyboard(field, in: window)
       field.stringValue = query
       field.sendAction(field.action, to: field.target)
+      window.makeFirstResponder(nil)
+      try await focusSearchUsingKeyboard(field, in: window)
+      (field.currentEditor() as? NSTextView)?.setSelectedRange(
+        NSRange(location: query.utf16.count, length: 0))
+      try await focusSearchUsingKeyboard(field, in: window)
+      window.makeFirstResponder(nil)
+      print("PASS: Command-F focuses empty search and selects all existing text on repeated use.")
       probe.pendingDownload?.resume()
       probe.pendingDownload = nil
       try await eventually {
@@ -183,6 +194,26 @@ struct CatalogNavigationTests {
   private static func choose(_ title: String, in picker: NSPopUpButton) {
     picker.selectItem(withTitle: title)
     picker.menu?.performActionForItem(at: picker.indexOfSelectedItem)
+  }
+
+  private static func focusSearchUsingKeyboard(_ field: NSTextField, in window: NSWindow)
+    async throws
+  {
+    let original = field.stringValue
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: .command,
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, characters: "f", charactersIgnoringModifiers: "f", isARepeat: false,
+        keyCode: 3)
+    else { throw failure("Create the Command-F key event.") }
+    NSApplication.shared.sendEvent(event)
+    try await eventually {
+      guard let editor = field.currentEditor() as? NSTextView else { return false }
+      return window.firstResponder === editor
+        && editor.selectedRange() == NSRange(location: 0, length: original.utf16.count)
+    }
+    try require(field.stringValue == original, "Command-F must preserve the search text.")
   }
 
   private static func search(in view: NSView) -> NSTextField? {
