@@ -11,6 +11,8 @@ struct SimulatorDevice: Identifiable, Equatable, Sendable {
   let name: String
   let runtime: String
   let state: SimulatorState
+  var dataPath: URL? = nil
+  var deviceTypeIdentifier: String? = nil
 }
 
 struct SimulatorDiscovery: Sendable {
@@ -81,6 +83,8 @@ struct SimulatorDiscovery: Sendable {
         let name: String
         let state: SimulatorState
         let isAvailable: Bool
+        let dataPath: String?
+        let deviceTypeIdentifier: String?
       }
       let devices: [String: [Device]]
     }
@@ -93,7 +97,11 @@ struct SimulatorDiscovery: Sendable {
           id: device.udid,
           name: device.name,
           runtime: String(runtime.dropFirst(prefix.count)).replacingOccurrences(of: "-", with: "."),
-          state: device.state
+          state: device.state,
+          dataPath: device.dataPath.flatMap {
+            $0.hasPrefix("/") ? URL(fileURLWithPath: $0, isDirectory: true) : nil
+          },
+          deviceTypeIdentifier: device.deviceTypeIdentifier
         )
       }
     }.sorted {

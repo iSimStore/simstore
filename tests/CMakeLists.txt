@@ -137,6 +137,18 @@ add_executable(SimStoreApplicationsTest SimulatorApplicationsTests.swift
 target_compile_options(SimStoreApplicationsTest PRIVATE -parse-as-library)
 add_swift_test_suite(simulator-applications SimStoreApplicationsTest TIMEOUT 15)
 
+add_executable(SimStoreFilesTest SimulatorFilesTests.swift
+    "${PROJECT_SOURCE_DIR}/src/SimulatorFiles.swift"
+    "${PROJECT_SOURCE_DIR}/src/SimulatorFilesButton.swift"
+    "${PROJECT_SOURCE_DIR}/src/SimulatorDevicePresentation.swift"
+    "${PROJECT_SOURCE_DIR}/src/SimulatorDiscovery.swift"
+    "${PROJECT_SOURCE_DIR}/src/SimulatorState.swift"
+    "${PROJECT_SOURCE_DIR}/src/Command.swift"
+)
+target_compile_options(SimStoreFilesTest PRIVATE -parse-as-library)
+add_test(NAME simulator-files COMMAND SimStoreFilesTest)
+set_tests_properties(simulator-files PROPERTIES TIMEOUT 15 RUN_SERIAL TRUE)
+
 add_executable(SimStoreInstalledAppsTest InstalledAppsStoreTests.swift
     "${PROJECT_SOURCE_DIR}/src/SimulatorOperationMonitor.swift"
     "${PROJECT_SOURCE_DIR}/src/InstalledAppsStore.swift"

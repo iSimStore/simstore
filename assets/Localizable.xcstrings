@@ -721,6 +721,22 @@
         }
       }
     },
+    "Couldn’t Open Folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t Open Folder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法打开文件夹"
+          }
+        }
+      }
+    },
     "Couldn’t Read Installed Apps": {
       "localizations": {
         "en": {
@@ -893,6 +909,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "详情"
+          }
+        }
+      }
+    },
+    "Developer Tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Developer Tools"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开发工具"
           }
         }
       }
@@ -1329,6 +1361,22 @@
         }
       }
     },
+    "Local files aren’t available yet. Start the simulator and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local files aren’t available yet. Start the simulator and try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地文件尚不可用。请启动模拟器后重试。"
+          }
+        }
+      }
+    },
     "Looking for your simulators…": {
       "localizations": {
         "en": {
@@ -1473,6 +1521,22 @@
         }
       }
     },
+    "News": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "News"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新闻"
+          }
+        }
+      }
+    },
     "Nightly builds are unstable and may contain bugs.": {
       "localizations": {
         "en": {
@@ -1585,6 +1649,38 @@
         }
       }
     },
+    "On My iPad": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On My iPad"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的 iPad"
+          }
+        }
+      }
+    },
+    "On My iPhone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On My iPhone"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的 iPhone"
+          }
+        }
+      }
+    },
     "Only installed user apps can be uninstalled. Refresh the app list and try again.": {
       "localizations": {
         "en": {
@@ -1681,6 +1777,22 @@
         }
       }
     },
+    "Open in Finder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Finder"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中打开"
+          }
+        }
+      }
+    },
     "Open the App Store and search for Xcode.": {
       "localizations": {
         "en": {
@@ -1741,6 +1853,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "操作耗时较长"
+          }
+        }
+      }
+    },
+    "Photography": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photography"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄影"
           }
         }
       }
@@ -1837,6 +1965,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "构建脚本提交"
+          }
+        }
+      }
+    },
+    "Reference": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reference"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "参考"
           }
         }
       }
@@ -2545,6 +2689,22 @@
         }
       }
     },
+    "The folder could not be opened in Finder. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder could not be opened in Finder. Try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法在访达中打开文件夹，请重试。"
+          }
+        }
+      }
+    },
     "The previous app is saved at %@. Restore it before trying again.": {
       "localizations": {
         "en": {
@@ -3085,6 +3245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "等待中…"
+          }
+        }
+      }
+    },
+    "Weather": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weather"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "天气"
           }
         }
       }

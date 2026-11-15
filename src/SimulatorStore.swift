@@ -59,7 +59,8 @@ final class SimulatorStore {
           return device
         }
         return SimulatorDevice(
-          id: device.id, name: device.name, runtime: device.runtime, state: state)
+          id: device.id, name: device.name, runtime: device.runtime, state: state,
+          dataPath: device.dataPath, deviceTypeIdentifier: device.deviceTypeIdentifier)
       })
   }
 

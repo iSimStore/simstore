@@ -147,6 +147,7 @@ struct CatalogBrowserView: View {
       }
       .lineLimit(1)
       Spacer(minLength: 12)
+      SimulatorFilesButton(device: device)
       if device.state.canStart || device.state.canShutdown || device.state.isTransitioning {
         SimulatorPowerButton(
           device: device,
