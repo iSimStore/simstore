@@ -293,6 +293,11 @@ struct SimulatorStoreTests {
     try require(
       store.selectedDevice?.state == .booting, "Expose startup progress for the selected device.")
     try require(
+      store.selectedDevice?.dataPath == fixture.devices.first?.dataPath
+        && store.selectedDevice?.deviceTypeIdentifier
+          == fixture.devices.first?.deviceTypeIdentifier,
+      "Keep local files accessible with the correct device model during startup.")
+    try require(
       await store.startDevice("A") == false, "A duplicate start must not report success.")
     try require(await probe.calls == ["A"], "Repeated clicks must not start a device twice.")
     store.selectDevice("B")
@@ -448,7 +453,10 @@ struct SimulatorStoreTests {
   }
 
   static func device(_ id: String, state: SimulatorState = .shutdown) -> SimulatorDevice {
-    SimulatorDevice(id: id, name: "iPhone \(id)", runtime: "27.0", state: state)
+    SimulatorDevice(
+      id: id, name: "iPhone \(id)", runtime: "27.0", state: state,
+      dataPath: URL(fileURLWithPath: "/Devices/\(id)/data"),
+      deviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-17")
   }
 
   static func eventually(_ condition: () async -> Bool) async throws {

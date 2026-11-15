@@ -13,7 +13,19 @@ extension SimulatorDevice {
     }
   }
 
-  var formFactor: FormFactor { name.contains("iPad") ? .tablet : .phone }
+  var formFactor: FormFactor {
+    if let deviceTypeIdentifier {
+      return deviceTypeIdentifier.contains(".iPad-") ? .tablet : .phone
+    }
+    return name.contains("iPad") ? .tablet : .phone
+  }
+
+  var localFilesTitle: String {
+    switch formFactor {
+    case .phone: String(localized: "On My iPhone")
+    case .tablet: String(localized: "On My iPad")
+    }
+  }
 
   var symbolName: String { formFactor.symbolName }
 

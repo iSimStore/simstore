@@ -26,6 +26,11 @@ extension SimulatorStoreTests {
       store.shuttingDownDeviceIDs == ["A"] && store.selectedDevice?.state == .shuttingDown,
       "Reserve shutdown synchronously and prevent app operations before the first await.")
     try require(
+      store.selectedDevice?.dataPath == fixture.devices.first?.dataPath
+        && store.selectedDevice?.deviceTypeIdentifier
+          == fixture.devices.first?.deviceTypeIdentifier,
+      "Keep local files accessible with the correct device model during shutdown.")
+    try require(
       store.shutdownDevice("A") == nil, "Repeated clicks cannot issue a duplicate shutdown.")
     try require(
       await store.startDevice("A") == false, "Do not boot a simulator while shutdown is pending.")

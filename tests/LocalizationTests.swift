@@ -37,6 +37,20 @@ struct LocalizationTests {
         ("Start Simulator", "Start Simulator", "启动模拟器"),
         ("Starting…", "Starting…", "正在启动…"),
         ("Shut Down", "Shut Down", "关机"),
+        ("On My iPhone", "On My iPhone", "我的 iPhone"),
+        ("On My iPad", "On My iPad", "我的 iPad"),
+        ("Open in Finder", "Open in Finder", "在访达中打开"),
+        ("Couldn’t Open Folder", "Couldn’t Open Folder", "无法打开文件夹"),
+        (
+          "Local files aren’t available yet. Start the simulator and try again.",
+          "Local files aren’t available yet. Start the simulator and try again.",
+          "本地文件尚不可用。请启动模拟器后重试。"
+        ),
+        (
+          "The folder could not be opened in Finder. Try again.",
+          "The folder could not be opened in Finder. Try again.",
+          "无法在访达中打开文件夹，请重试。"
+        ),
         ("Shutting Down…", "Shutting Down…", "正在关机…"),
         ("Keep Waiting", "Keep Waiting", "继续等待"),
         (
@@ -54,6 +68,11 @@ struct LocalizationTests {
         ("Refresh Catalog", "Refresh Catalog", "刷新目录"),
         ("Cloud", "Cloud", "云服务"),
         ("Email", "Email", "电子邮件"),
+        ("Developer Tools", "Developer Tools", "开发工具"),
+        ("News", "News", "新闻"),
+        ("Photography", "Photography", "摄影"),
+        ("Reference", "Reference", "参考"),
+        ("Weather", "Weather", "天气"),
         ("Lifestyle", "Lifestyle", "生活方式"),
         ("Music", "Music", "音乐"),
         ("Security", "Security", "安全"),

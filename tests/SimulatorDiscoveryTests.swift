@@ -33,7 +33,8 @@ struct SimulatorDiscoveryTests {
           {"udid": "UNAVAILABLE", "name": "Old iPhone", "state": "Shutdown", "isAvailable": false}
         ],
         "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [
-          {"udid": "TABLET", "name": "iPad Air", "state": "Booted", "isAvailable": true}
+          {"udid": "TABLET", "name": "iPad Air", "state": "Booted", "isAvailable": true,
+           "dataPath": "/Devices/TABLET/data", "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Air"}
         ],
         "com.apple.CoreSimulator.SimRuntime.tvOS-27-0": [
           {"udid": "TV", "name": "Apple TV", "state": "Booted", "isAvailable": true}
@@ -53,6 +54,11 @@ struct SimulatorDiscoveryTests {
     try require(
       devices.first(where: { $0.id == "TABLET" })?.state == .booted,
       "The device's power state should be preserved.")
+    let tablet = devices.first(where: { $0.id == "TABLET" })
+    try require(
+      tablet?.dataPath?.path == "/Devices/TABLET/data"
+        && tablet?.deviceTypeIdentifier == "com.apple.CoreSimulator.SimDeviceType.iPad-Air",
+      "Preserve the reported data path and model identifier for local files access.")
   }
 
   static func malformedInventory() throws {

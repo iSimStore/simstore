@@ -8,6 +8,8 @@ add_executable(SimStore MACOSX_BUNDLE
     SimulatorControl.swift
     SimulatorPresenter.swift
     SimulatorApplications.swift
+    SimulatorFiles.swift
+    SimulatorFilesButton.swift
     InstalledAppsStore.swift
     InstalledAppsStatusView.swift
     SimulatorStore.swift
