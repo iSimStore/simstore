@@ -83,6 +83,41 @@ enum AppInstallButtonTests {
     print("PASS: native install gating, Open during refresh, and stale confirmation protection.")
   }
 
+  static func deviceCompatibility() async throws {
+    NSApplication.shared.setActivationPolicy(.regular)
+    var version = InstallationFixtures.version()
+    version.supportsIPhone = false
+    let app = InstallationFixtures.app(version: version)
+    for (isIPad, runtime, allowsIncompatible, expected) in [
+      (false, "27.0", true, false), (true, "27.0", false, true),
+      (true, "14.0", false, false), (true, "14.0", true, true),
+    ] {
+      let device = SimulatorDevice(
+        id: "test", name: "Renamed device", runtime: runtime, state: .booted,
+        deviceTypeIdentifier: isIPad
+          ? "com.apple.CoreSimulator.SimDeviceType.iPad-Air"
+          : "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro")
+      let inventory = InstalledAppsStore(load: { _ in [] })
+      await inventory.refresh(for: device)
+      let store = AppInstallationStore(showDevice: { _ in })
+      let view = NSHostingView(
+        rootView: AppInstallButton(
+          app: app, version: version, device: device,
+          store: store, installedApps: inventory, allowsIncompatible: allowsIncompatible))
+      let window = NSWindow(
+        contentRect: NSRect(x: 0, y: 0, width: 240, height: 80),
+        styleMask: [.titled], backing: .buffered, defer: false)
+      window.isReleasedWhenClosed = false
+      window.contentView = view
+      window.makeKeyAndOrderFront(nil)
+      defer { window.close() }
+      try await InstallationFixtures.eventually { button(in: view) != nil }
+      try InstallationFixtures.require(
+        button(in: view)?.isEnabled == expected,
+        "Device restrictions cannot be overridden; only the minimum OS can be overridden on iPad.")
+    }
+  }
+
   private static func button(in view: NSView) -> NSButton? {
     if let button = view as? NSButton { return button }
     return view.subviews.lazy.compactMap { button(in: $0) }.first

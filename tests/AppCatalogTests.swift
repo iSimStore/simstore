@@ -14,6 +14,7 @@ struct AppCatalogTests {
       .init("largeVersionComponents", largeVersionComponents),
       .init("localizationAndCompatibility", localizationAndCompatibility),
       .init("compatibleUpdates", compatibleUpdates),
+      .init("deviceCompatibility", deviceCompatibility),
       .init("rejectInvalidCatalogs", rejectInvalidCatalogs),
     ]
   }
@@ -105,6 +106,38 @@ struct AppCatalogTests {
     try require(
       entry.versions.last?.comparison(with: "1.10.0") == .orderedAscending,
       "Selecting a historical version must distinguish a downgrade from an update.")
+  }
+
+  static func deviceCompatibility() throws {
+    var tablet = version("2.0.0")
+    tablet["supportsIPhone"] = false
+    let entry = try decode(apps: [app(versions: [tablet, version("1.0.0")])]).apps[0]
+    try require(!entry.latestVersion.supportsIPhone, "Decode iPad-only builds.")
+    try require(entry.versions[1].supportsIPhone, "Absent flags support both device families.")
+    try require(
+      entry.recommendedVersion(for: "27").version == "1.0.0",
+      "Recommend the newest iPhone-compatible historical version.")
+    try require(
+      entry.recommendedVersion(for: "27", isIPad: true).version == "2.0.0",
+      "iPad can use the latest iPad-only version.")
+    try require(
+      entry.availableUpdate(from: "1.0.0", runtime: "27") == nil,
+      "Do not offer iPad-only updates on iPhone.")
+    try require(
+      entry.availableUpdate(from: "1.0.0", runtime: "27", isIPad: true)?.version == "2.0.0",
+      "Offer iPad-only updates on iPad.")
+    try require(
+      !entry.latestVersion.isCompatible(with: "15", isIPad: true),
+      "iPad-only builds still require their minimum OS.")
+    let tabletOnly = try decode(apps: [app(versions: [tablet])]).apps[0]
+    try require(
+      tabletOnly.latestCompatibleVersion(for: "27") == nil,
+      "An iPad-only app has no iPhone-compatible version.")
+    for value: Any in [true, NSNull(), 0, 1, "false"] {
+      var invalid = tablet
+      invalid["supportsIPhone"] = value
+      try reject(["schemaVersion": 1, "apps": [app(versions: [invalid])]])
+    }
   }
 
   static func rejectInvalidCatalogs() throws {

@@ -11,8 +11,9 @@ extension CatalogApp {
 }
 
 extension CatalogVersion {
-  var minimumOSLabel: String {
-    String(localized: "iOS \(minSimulatorOS) or later")
+  var requirementsLabel: String {
+    let minimumOS = String(localized: "iOS \(minSimulatorOS) or later")
+    return supportsIPhone ? minimumOS : "\(String(localized: "iPad only")) · \(minimumOS)"
   }
 }
 

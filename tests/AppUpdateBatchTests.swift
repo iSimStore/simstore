@@ -7,6 +7,7 @@ enum AppUpdateBatchTests {
   static var cases: [TestSuite.Case] {
     [
       .init("queue.selectionAndSerialExecution", selectionAndSerialExecution),
+      .init("queue.deviceCompatibility", deviceCompatibility),
       .init("queue.failureAndRetry", failureAndRetry),
       .init("queue.cancellation", cancellation),
       .init("queue.cancellationDuringInstall", cancellationDuringInstall),
@@ -16,6 +17,29 @@ enum AppUpdateBatchTests {
       .init(
         "queue.refusedInstallationsReleaseReservations", refusedInstallationsReleaseReservations),
     ]
+  }
+
+  private static func deviceCompatibility() async throws {
+    var version = InstallationFixtures.version(number: "2.0.0")
+    version.supportsIPhone = false
+    let app = InstallationFixtures.app(version: version)
+    let catalog = AppCatalog(schemaVersion: 1, apps: [app])
+    let inventory = InstalledAppsStore(load: { _ in
+      [SimulatorApplication(bundleID: app.bundleID, version: "1.0.0", isUserApplication: true)]
+    })
+    let store = AppInstallationStore(showDevice: { _ in })
+    let phone = InstallationFixtures.device
+    await inventory.refresh(for: phone)
+    try InstallationFixtures.require(
+      store.pendingUpdates(in: catalog, installedApps: inventory, on: phone).isEmpty,
+      "Update all must exclude iPad-only builds on iPhone.")
+    let tablet = SimulatorDevice(
+      id: "tablet", name: "Renamed device", runtime: "27.0", state: .booted,
+      deviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPad-Air")
+    await inventory.refresh(for: tablet)
+    try InstallationFixtures.require(
+      store.pendingUpdates(in: catalog, installedApps: inventory, on: tablet).map(\.id) == [app.id],
+      "Update all must include iPad-only builds on iPad.")
   }
 
   private static func selectionAndSerialExecution() async throws {

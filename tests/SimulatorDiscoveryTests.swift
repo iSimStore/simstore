@@ -33,7 +33,7 @@ struct SimulatorDiscoveryTests {
           {"udid": "UNAVAILABLE", "name": "Old iPhone", "state": "Shutdown", "isAvailable": false}
         ],
         "com.apple.CoreSimulator.SimRuntime.iOS-18-5": [
-          {"udid": "TABLET", "name": "iPad Air", "state": "Booted", "isAvailable": true,
+          {"udid": "TABLET", "name": "My renamed device", "state": "Booted", "isAvailable": true,
            "dataPath": "/Devices/TABLET/data", "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPad-Air"}
         ],
         "com.apple.CoreSimulator.SimRuntime.tvOS-27-0": [
@@ -55,6 +55,13 @@ struct SimulatorDiscoveryTests {
       devices.first(where: { $0.id == "TABLET" })?.state == .booted,
       "The device's power state should be preserved.")
     let tablet = devices.first(where: { $0.id == "TABLET" })
+    try require(
+      tablet?.isIPad == true && devices.first(where: { $0.id == "PHONE" })?.isIPad == false,
+      "Use model identifiers, not editable names, and do not assume unknown models are iPads.")
+    let renamedPhone = SimulatorDevice(
+      id: "renamed", name: "iPad Air", runtime: "27", state: .booted,
+      deviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro")
+    try require(!renamedPhone.isIPad, "An iPhone renamed to iPad must remain an iPhone.")
     try require(
       tablet?.dataPath?.path == "/Devices/TABLET/data"
         && tablet?.deviceTypeIdentifier == "com.apple.CoreSimulator.SimDeviceType.iPad-Air",

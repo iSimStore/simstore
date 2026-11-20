@@ -15,7 +15,7 @@ struct CatalogAppCard: View {
   var body: some View {
     let version =
       installations.activeUpdateVersion(appID: app.id, deviceID: device.id)
-      ?? app.recommendedVersion(for: runtime)
+      ?? app.recommendedVersion(for: runtime, isIPad: device.isIPad)
     VStack(alignment: .leading, spacing: 14) {
       VStack(alignment: .leading, spacing: 14) {
         HStack(spacing: 12) {
@@ -79,7 +79,7 @@ struct CatalogAppCard: View {
           verbatim:
             section == .installed
             ? "\(app.displayDescription) · \(versionText(version))"
-            : "\(app.displayDescription) · \(versionText(version)) · \(version.minimumOSLabel) · \(ByteCountFormatter.string(fromByteCount: version.size, countStyle: .file))"
+            : "\(app.displayDescription) · \(versionText(version)) · \(version.requirementsLabel) · \(ByteCountFormatter.string(fromByteCount: version.size, countStyle: .file))"
         )
       )
       .accessibilityHint(Text("View app details and versions"))
@@ -123,7 +123,10 @@ struct CatalogAppCard: View {
       } else if installations.error(appID: app.id, deviceID: device.id) != nil {
         Image(systemName: "exclamationmark.triangle").foregroundStyle(.red)
         Text(verbatim: versionText(version)).monospacedDigit()
-      } else if showsInstallation || version.isCompatible(with: runtime) {
+      } else if !version.supportsIPhone && !device.isIPad && !showsInstallation {
+        Label("iPad only", systemImage: "ipad")
+          .foregroundStyle(.orange)
+      } else if showsInstallation || version.isCompatible(with: runtime, isIPad: device.isIPad) {
         Text(verbatim: versionText(version)).monospacedDigit()
       } else {
         Label("iOS \(version.minSimulatorOS)+", systemImage: "exclamationmark.triangle")
