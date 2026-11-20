@@ -13,6 +13,10 @@ struct SimulatorDevice: Identifiable, Equatable, Sendable {
   let state: SimulatorState
   var dataPath: URL? = nil
   var deviceTypeIdentifier: String? = nil
+
+  var isIPad: Bool {
+    deviceTypeIdentifier?.hasPrefix("com.apple.CoreSimulator.SimDeviceType.iPad-") == true
+  }
 }
 
 struct SimulatorDiscovery: Sendable {

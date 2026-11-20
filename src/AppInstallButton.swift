@@ -49,12 +49,15 @@ struct AppInstallButton: View {
     if let phase { return phase.canCancel }
     guard device.state == .booted, let isInstalled else { return false }
     if idleAction == .open { return isInstalled }
-    guard installedApps.canInstall(on: device) else { return false }
-    return allowsIncompatible || version.isCompatible(with: device.runtime)
+    guard version.supportsIPhone || device.isIPad, installedApps.canInstall(on: device) else {
+      return false
+    }
+    return allowsIncompatible || version.isCompatible(with: device.runtime, isIPad: device.isIPad)
   }
 
   private var requiresCompatibilityOverride: Bool {
-    allowsIncompatible && idleAction != .open && !version.isCompatible(with: device.runtime)
+    (version.supportsIPhone || device.isIPad) && allowsIncompatible && idleAction != .open
+      && !version.isCompatible(with: device.runtime, isIPad: device.isIPad)
   }
 
   private var isPrimary: Bool { phase == nil && !requiresCompatibilityOverride }
@@ -141,7 +144,10 @@ struct AppInstallButton: View {
     .keyboardShortcut(isDefaultAction && isPrimary ? .defaultAction : nil)
     .accessibilityLabel(Text(verbatim: "\(title(for: action)) \(app.name)"))
     .accessibilityValue(Text(verbatim: phase?.summary(totalBytes: version.size) ?? ""))
-    .help(Text(verbatim: isInstalled == true ? device.name : version.minimumOSLabel))
+    .help(
+      Text(
+        verbatim: isInstalled == true && (version.supportsIPhone || device.isIPad)
+          ? device.name : version.requirementsLabel))
   }
 }
 

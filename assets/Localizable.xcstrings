@@ -2833,6 +2833,22 @@
         }
       }
     },
+    "This build is only available for iPad. Select an iPad simulator to install it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build is only available for iPad. Select an iPad simulator to install it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此构建仅支持 iPad。请选择 iPad 模拟器进行安装。"
+          }
+        }
+      }
+    },
     "This build requires iOS %@ or later. It may not work on iOS %@.": {
       "localizations": {
         "en": {
@@ -3405,6 +3421,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "iOS %@+"
+          }
+        }
+      }
+    },
+    "iPad only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPad only"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅限 iPad"
           }
         }
       }

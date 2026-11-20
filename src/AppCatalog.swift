@@ -33,16 +33,18 @@ struct CatalogApp: Identifiable, Hashable, Sendable {
     return languages.first.flatMap { description[$0] } ?? description["en"] ?? ""
   }
 
-  func recommendedVersion(for runtime: String) -> CatalogVersion {
-    latestCompatibleVersion(for: runtime) ?? latestVersion
+  func recommendedVersion(for runtime: String, isIPad: Bool = false) -> CatalogVersion {
+    latestCompatibleVersion(for: runtime, isIPad: isIPad) ?? latestVersion
   }
 
-  func latestCompatibleVersion(for runtime: String) -> CatalogVersion? {
-    versions.first { $0.isCompatible(with: runtime) }
+  func latestCompatibleVersion(for runtime: String, isIPad: Bool = false) -> CatalogVersion? {
+    versions.first { $0.isCompatible(with: runtime, isIPad: isIPad) }
   }
 
-  func availableUpdate(from installedVersion: String?, runtime: String) -> CatalogVersion? {
-    guard let version = latestCompatibleVersion(for: runtime),
+  func availableUpdate(from installedVersion: String?, runtime: String, isIPad: Bool = false)
+    -> CatalogVersion?
+  {
+    guard let version = latestCompatibleVersion(for: runtime, isIPad: isIPad),
       version.comparison(with: installedVersion) == .orderedDescending
     else { return nil }
     return version
@@ -57,10 +59,12 @@ struct CatalogVersion: Identifiable, Hashable, Sendable {
   let revision: String
   let recipeRevision: String
   let time: Int64
+  var supportsIPhone = true
 
   var id: String { version }
 
-  func isCompatible(with runtime: String) -> Bool {
+  func isCompatible(with runtime: String, isIPad: Bool = false) -> Bool {
+    guard supportsIPhone || isIPad else { return false }
     guard let minimum = CatalogVersionNumber(minSimulatorOS),
       let installed = CatalogVersionNumber(runtime)
     else { return false }
@@ -142,7 +146,7 @@ extension CatalogApp: Decodable {
 
 extension CatalogVersion: Decodable {
   private enum CodingKeys: String, CodingKey {
-    case version, minSimulatorOS, sha256, size, revision, recipeRevision, time
+    case version, minSimulatorOS, sha256, size, revision, recipeRevision, time, supportsIPhone
   }
 
   init(from decoder: Decoder) throws {
@@ -154,6 +158,10 @@ extension CatalogVersion: Decodable {
     revision = try values.decode(String.self, forKey: .revision)
     recipeRevision = try values.decode(String.self, forKey: .recipeRevision)
     time = try values.decode(Int64.self, forKey: .time)
+    if values.contains(.supportsIPhone) {
+      supportsIPhone = try values.decode(Bool.self, forKey: .supportsIPhone)
+      guard !supportsIPhone else { throw AppCatalogError.invalidCatalog }
+    }
     guard matches(version, pattern: "(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)"),
       CatalogVersionNumber(version) != nil,
       matches(minSimulatorOS, pattern: "[1-9][0-9]*(?:\\.[0-9]+){0,2}"),

@@ -13,6 +13,9 @@ struct AppInstaller: Sendable {
     progress: @escaping Progress
   ) async throws {
     guard device.state == .booted else { throw SimulatorApplicationsError.notRunning }
+    guard version.supportsIPhone || device.isIPad else {
+      throw SimulatorApplicationsError.requiresIPad
+    }
     try Task.checkCancellation()
     let directory = temporaryDirectory.appending(
       component: "\(AppConfiguration.applicationIdentifier)-\(UUID().uuidString)")

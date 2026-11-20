@@ -105,11 +105,15 @@ enum SimulatorApplications {
 
 enum SimulatorApplicationsError: LocalizedError {
   case notRunning
+  case requiresIPad
   case invalidResponse
   case notUserApplication
 
   var errorDescription: String? {
     switch self {
+    case .requiresIPad:
+      String(
+        localized: "This build is only available for iPad. Select an iPad simulator to install it.")
     case .notRunning:
       String(
         localized:

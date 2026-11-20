@@ -34,6 +34,12 @@ struct LocalizationTests {
       let labels: [(String.LocalizationValue, String, String)] = [
         ("Discover", "Discover", "发现"), ("Installed", "Installed", "已安装"),
         ("Updates", "Updates", "更新"),
+        ("iPad only", "iPad only", "仅限 iPad"),
+        (
+          "This build is only available for iPad. Select an iPad simulator to install it.",
+          "This build is only available for iPad. Select an iPad simulator to install it.",
+          "此构建仅支持 iPad。请选择 iPad 模拟器进行安装。"
+        ),
         ("Start Simulator", "Start Simulator", "启动模拟器"),
         ("Starting…", "Starting…", "正在启动…"),
         ("Shut Down", "Shut Down", "关机"),

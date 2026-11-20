@@ -31,7 +31,7 @@ final class AppUpdateQueue {
       guard !isBusy(app.id),
         let version = app.availableUpdate(
           from: installedApps.application(bundleID: app.bundleID, deviceID: device.id)?.version,
-          runtime: device.runtime)
+          runtime: device.runtime, isIPad: device.isIPad)
       else { return nil }
       return AppUpdateBatch.Item(app: app, version: version)
     }

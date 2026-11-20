@@ -51,11 +51,14 @@ final class InstalledAppsStore {
       guard let installed = application(bundleID: app.bundleID, deviceID: device.id),
         installed.isUserApplication
       else { return false }
-      if app.availableUpdate(from: installed.version, runtime: device.runtime) != nil {
+      if app.availableUpdate(
+        from: installed.version, runtime: device.runtime, isIPad: device.isIPad) != nil
+      {
         return true
       }
       return includingRecent && recentReplacements.contains(app.bundleID.lowercased())
-        && app.latestCompatibleVersion(for: device.runtime)?.comparison(with: installed.version)
+        && app.latestCompatibleVersion(for: device.runtime, isIPad: device.isIPad)?.comparison(
+          with: installed.version)
           == .orderedSame
     }
   }

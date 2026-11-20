@@ -22,7 +22,7 @@ struct CatalogAppDetailView: View {
     self.installations = installations
     _versionID = State(
       initialValue: installations.activeUpdateVersion(appID: app.id, deviceID: device.id)?.version
-        ?? app.recommendedVersion(for: device.runtime).version)
+        ?? app.recommendedVersion(for: device.runtime, isIPad: device.isIPad).version)
   }
 
   private var runtime: String { device.runtime }
@@ -30,7 +30,7 @@ struct CatalogAppDetailView: View {
   private var version: CatalogVersion {
     installations.activeUpdateVersion(appID: app.id, deviceID: device.id)
       ?? app.versions.first(where: { $0.version == versionID })
-      ?? app.recommendedVersion(for: runtime)
+      ?? app.recommendedVersion(for: runtime, isIPad: device.isIPad)
   }
 
   private var versions: [CatalogVersion] {
@@ -90,7 +90,7 @@ struct CatalogAppDetailView: View {
             }
             GridRow {
               Text("Requires").foregroundStyle(.secondary)
-              Text(verbatim: version.minimumOSLabel)
+              Text(verbatim: version.requirementsLabel)
             }
             GridRow {
               Text("Download Size").foregroundStyle(.secondary)
@@ -116,7 +116,15 @@ struct CatalogAppDetailView: View {
           .font(.system(size: 13))
           .frame(maxWidth: .infinity, alignment: .leading)
 
-          if !version.isCompatible(with: runtime) {
+          if !version.supportsIPhone && !device.isIPad {
+            Text("This build is only available for iPad. Select an iPad simulator to install it.")
+              .font(.system(size: 12))
+              .foregroundStyle(.orange)
+          }
+
+          if (version.supportsIPhone || device.isIPad)
+            && !version.isCompatible(with: runtime, isIPad: device.isIPad)
+          {
             Label {
               Text(
                 "This build requires iOS \(version.minSimulatorOS) or later. It may not work on iOS \(runtime)."

@@ -10,6 +10,7 @@ struct AppInstallationTests {
   static var cases: [TestSuite.Case] {
     AppPackageTests.cases + AppDownloadTests.cases + [
       .init("pipeline", pipeline),
+      .init("rejectIPadOnlyInstallation", rejectIPadOnlyInstallation),
       .init("preparationStopsBeforeFinalization", preparationStopsBeforeFinalization),
       .init("failureAndCleanup", failureAndCleanup),
       .init("perDeviceJobs", perDeviceJobs),
@@ -26,7 +27,27 @@ struct AppInstallationTests {
       .init("replacementWhileSwitchingDevices", replacementWhileSwitchingDevices),
       .init("updateDuringInventoryRefresh", updateDuringInventoryRefresh),
       .init("installButton", AppInstallButtonTests.run),
+      .init("installButtonDeviceCompatibility", AppInstallButtonTests.deviceCompatibility),
     ] + AppUpdateBatchTests.cases
+  }
+
+  static func rejectIPadOnlyInstallation() async throws {
+    var version = InstallationFixtures.version()
+    version.supportsIPhone = false
+    let installer = AppInstaller(
+      download: { _, _, _ in
+        throw InstallationFixtures.failure("Unsupported installs must not download.")
+      },
+      command: { _, _ in
+        throw InstallationFixtures.failure("Unsupported installs must not run commands.")
+      })
+    do {
+      try await installer.install(
+        app: InstallationFixtures.app(version: version), version: version,
+        on: InstallationFixtures.device
+      ) { _ in }
+      throw InstallationFixtures.failure("An iPad-only install was accepted on iPhone.")
+    } catch SimulatorApplicationsError.requiresIPad {}
   }
 
   static func pipeline() async throws {
@@ -78,6 +99,19 @@ struct AppInstallationTests {
     try InstallationFixtures.require(
       commands.calls.last == ["simctl", "launch", "device-A", "org.example.App"],
       "Open the installed app on its target device.")
+
+    var tabletVersion = version
+    tabletVersion.supportsIPhone = false
+    let tablet = SimulatorDevice(
+      id: "tablet", name: "Renamed", runtime: "27.0", state: .booted,
+      deviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPad-Air")
+    try await installer.install(
+      app: InstallationFixtures.app(version: tabletVersion),
+      version: tabletVersion, on: tablet
+    ) { _ in }
+    try InstallationFixtures.require(
+      commands.calls.last?.prefix(3) == ["simctl", "install", "tablet"],
+      "The same iPad-only build must complete installation on an iPad.")
   }
 
   static func preparationStopsBeforeFinalization() async throws {
